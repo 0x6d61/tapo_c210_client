@@ -354,9 +354,10 @@ TalkbackService
 - `C210TalkbackAdapter`: 実機でプロトコルを確認できた場合だけ有効化
 - `SqliteProfileRepository` / `SqliteSecretStore`: SQLite JDBCでプロファイルとパスワードを管理
 
-初期アプリケーション層として、`ListSavedProfiles` と `ConnectWithProfile` を実装済みである。前者は保存済みプロファイルを
+初期アプリケーション層として、`ListSavedProfiles`、`ConnectWithProfile`、`ConnectWithCredentials` を実装済みである。前者は保存済みプロファイルを
 Presentation層へ渡し、後者は選択されたプロファイルのパスワードを`SecretStore`から取得して、資格情報をURIへ埋め込まない
-`RtspConnectionRequest`を`RtspConnector`へ渡す。RTSPライブラリはこのPortの外側へ隔離する。
+`RtspConnectionRequest`を`RtspConnector`へ渡す。`ConnectWithCredentials`は接続成功後、保存が明示された場合だけ自動表示名と資格情報を
+SQLiteへ保存する。保存に失敗しても接続済みセッションは維持し、画面へ警告を返す。RTSPライブラリはこのPortの外側へ隔離する。
 
 JavaFXの初期画面として、保存済みプロファイルの選択画面と手動接続フォームを実装済みである。フォームはIPv4、ONVIFポート、
 RTSPポート、ユーザー名、パスワード、ストリーム画質をネットワーク接続前に検証し、保存済みプロファイルはOSごとのアプリケー
