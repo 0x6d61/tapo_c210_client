@@ -30,11 +30,13 @@ import io.github.tapo.c210.onvif.OnvifCameraAdapter;
 import io.github.tapo.c210.streaming.VlcjRecordingEngine;
 import io.github.tapo.c210.streaming.VlcjRtspConnector;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -42,6 +44,7 @@ import javafx.concurrent.Task;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 /** JavaFX entry point for the C210 connection flow. */
@@ -388,7 +391,10 @@ public final class CameraClientApplication extends Application {
             return;
         }
         var camera = activeSession;
-        var output = nextRecordingPath();
+        var output = chooseRecordingPath();
+        if (output == null) {
+            return;
+        }
         var task = new Task<RecordingSession>() {
             @Override
             protected RecordingSession call() throws Exception {
@@ -432,9 +438,31 @@ public final class CameraClientApplication extends Application {
         worker.start();
     }
 
-    private static Path nextRecordingPath() {
-        var directory = defaultDatabasePath().getParent().resolve("recordings");
-        return directory.resolve("c210-%s.mp4".formatted(Instant.now().toString().replace(":", "-")));
+    private Path chooseRecordingPath() {
+        var chooser = new FileChooser();
+        chooser.setTitle("録画ファイルの保存先");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("MP4動画 (*.mp4)", "*.mp4"));
+
+        var appDirectory = defaultDatabasePath().getParent();
+        var recordingsDirectory = appDirectory.resolve("recordings");
+        if (Files.isDirectory(recordingsDirectory)) {
+            chooser.setInitialDirectory(recordingsDirectory.toFile());
+        } else if (Files.isDirectory(appDirectory)) {
+            chooser.setInitialDirectory(appDirectory.toFile());
+        }
+        chooser.setInitialFileName(RecordingFileName.create(Instant.now()));
+
+        var selected = chooser.showSaveDialog(stage);
+        if (selected == null) {
+            return null;
+        }
+        var output = selected.toPath();
+        var fileName = output.getFileName().toString();
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".mp4")) {
+            output = output.resolveSibling(fileName + ".mp4");
+        }
+        return output;
     }
 
     private static CameraDevice profileDevice(CameraProfile profile) {

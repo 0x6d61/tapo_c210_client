@@ -47,6 +47,6 @@ ONVIF制御にはApache-2.0の`onvif-java` 1.3.2を使用します。実機依�
 - `onvif-java` によるONVIF能力取得、PTZ操作、動体イベント購読Adapter
 - RTSP接続後の非同期ONVIF能力取得と、能力確認後に有効化されるJavaFX PTZ操作
 - ONVIF動体イベントの購読と、最新イベントをストリーム画面へ表示する処理
-- VLCJ録画用MediaPlayerによるライブ映像のローカルMP4録画（保存先自動生成）
+- VLCJ録画用MediaPlayerによるライブ映像のローカルMP4録画（開始時に保存先を選択）
 
 次は音声通話のC210固有プロトコルを実機で確認し、対応できる場合にAdapterへ接続します。
