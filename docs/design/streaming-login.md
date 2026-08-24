@@ -355,6 +355,10 @@ TalkbackService
 Presentation層へ渡し、後者は選択されたプロファイルのパスワードを`SecretStore`から取得して、資格情報をURIへ埋め込まない
 `RtspConnectionRequest`を`RtspConnector`へ渡す。RTSPライブラリはこのPortの外側へ隔離する。
 
+JavaFXの初期画面として、保存済みプロファイルの選択画面と手動接続フォームを実装済みである。フォームはIPv4、ONVIFポート、
+RTSPポート、ユーザー名、パスワード、ストリーム画質をネットワーク接続前に検証し、保存済みプロファイルはOSごとのアプリケー
+ションデータディレクトリにあるSQLiteから読み込む。RTSP接続AdapterとWS-Discoveryは次の実装単位である。
+
 ## 5. データ保存
 
 保存形式はSQLiteとする。SQLite JDBCドライバー（候補: Xerial SQLite JDBC）をMaven依存関係として追加し、保存場所はOSごとのアプリケーションデータディレクトリに置く。作業ディレクトリやリポジトリ直下には作らない。
