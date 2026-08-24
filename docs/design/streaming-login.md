@@ -354,7 +354,7 @@ TalkbackService
 - `C210TalkbackAdapter`: 実機でプロトコルを確認できた場合だけ有効化
 - `SqliteProfileRepository` / `SqliteSecretStore`: SQLite JDBCでプロファイルとパスワードを管理
 
-初期アプリケーション層として、`ListSavedProfiles`、`ConnectWithProfile`、`ConnectWithCredentials` を実装済みである。前者は保存済みプロファイルを
+初期アプリケーション層として、`ListSavedProfiles`、`ConnectWithProfile`、`ConnectWithCredentials`、`LoadCapabilities`を実装済みである。前者は保存済みプロファイルを
 Presentation層へ渡し、後者は選択されたプロファイルのパスワードを`SecretStore`から取得して、資格情報をURIへ埋め込まない
 `RtspConnectionRequest`を`RtspConnector`へ渡す。`ConnectWithCredentials`は接続成功後、保存が明示された場合だけ自動表示名と資格情報を
 SQLiteへ保存する。保存に失敗しても接続済みセッションは維持し、画面へ警告を返す。RTSPライブラリはこのPortの外側へ隔離する。
@@ -370,6 +370,7 @@ JavaFXの「カメラを検索」からは`Task`で非同期実行し、検索�
 IPアドレス、ONVIFポート、RTSPポートを接続フォームへ引き継ぐ。VLCJのRTSP Adapterは実装済みで、`stream1`を高画質、`stream2`
 を低画質として選択し、ユーザー名とパスワードをVLCJオプションへ渡す。RTSP URIには資格情報を埋め込まない。保存済みプロファイル選択と
 手動接続のどちらも接続成功時にライブ映像画面へ遷移し、切断時にセッションを停止して選択画面へ戻る。
+PTZ、ローカル録画、動体検知、音声通話は、カメラ能力を確認してから実行するユースケースとPortを追加済みであり、未対応機能は実行前に拒否する。
 
 ## 5. データ保存
 
