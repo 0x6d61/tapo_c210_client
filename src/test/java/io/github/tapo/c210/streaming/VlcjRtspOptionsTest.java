@@ -36,7 +36,7 @@ class VlcjRtspOptionsTest {
     }
 
     @Test
-    void addsAFileOutputToTheRecordingOptions() {
+    void recordsVideoOnlyToMp4AndUsesAHeadlessVideoOutput() {
         var options = VlcjRtspOptions.from(new RtspConnectionRequest(
                 new RtspEndpoint("192.168.1.20", 554, StreamQuality.HIGH),
                 new CameraCredentials("camera-user", "camera-password")));
@@ -44,7 +44,9 @@ class VlcjRtspOptionsTest {
 
         var recordingOptions = Arrays.stream(options.asRecordingVlcjOptions(output)).toList();
 
-        assertTrue(recordingOptions.stream().anyMatch(option -> option.contains(":sout=#std")));
+        assertTrue(recordingOptions.stream().anyMatch(option -> option.contains(
+                ":sout=#transcode{vcodec=copy,acodec=none}:std{access=file,mux=mp4")));
         assertTrue(recordingOptions.stream().anyMatch(option -> option.contains(output.toString())));
+        assertTrue(recordingOptions.contains(":vout=dummy"));
     }
 }
