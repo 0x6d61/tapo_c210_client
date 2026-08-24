@@ -32,5 +32,7 @@ RTSP再生にはVLCJ 4.8.3とLibVLCを使用します。実行時には対応す
 - ONVIF WS-DiscoveryのProbe生成、ProbeMatch解析、UDP検出、重複排除
 - JavaFXからの非同期カメラ検索と検出結果の接続フォーム引き継ぎ
 - VLCJ 4.8.3によるRTSP `stream1`／`stream2` 接続Adapterの基盤
+- 入力した資格情報での接続ユースケースと、明示的に選んだ場合だけ行うプロファイル保存
+- SQLite保存に失敗しても、成功済みのRTSPセッションを維持して警告を返す接続結果
 
 次はVLCJの映像サーフェスをJavaFXへ接続し、接続成功時にライブ映像画面へ遷移します。
