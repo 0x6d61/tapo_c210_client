@@ -15,6 +15,7 @@ import io.github.tapo.c210.application.StartRecording;
 import io.github.tapo.c210.application.StopCameraMovement;
 import io.github.tapo.c210.application.StopRecording;
 import io.github.tapo.c210.application.SwitchStreamQuality;
+import io.github.tapo.c210.application.UpdateCameraCredentials;
 import io.github.tapo.c210.application.ValidatedConnectionForm;
 import io.github.tapo.c210.application.port.MotionEventSubscription;
 import io.github.tapo.c210.application.port.RtspConnector;
@@ -98,9 +99,35 @@ public final class CameraClientApplication extends Application {
         var view = new ConnectionSelectionView(
                 profiles,
                 this::connectSavedProfile,
+                this::showProfileEdit,
                 this::showDiscovery,
                 this::showConnectionForm);
         stage.setScene(new Scene(view.root(), 720, 480));
+    }
+
+    private void showProfileEdit(CameraProfile profile) {
+        var view = new CameraProfileEditView(
+                profile,
+                () -> showConnectionSelection(loadProfiles()),
+                (username, password) -> updateProfileCredentials(profile, username, password));
+        stage.setScene(new Scene(view.root(), 620, 360));
+    }
+
+    private void updateProfileCredentials(
+            CameraProfile profile, String username, String password) {
+        try {
+            new UpdateCameraCredentials(
+                    new SqliteProfileRepository(database),
+                    new SqliteSecretStore(database))
+                    .execute(profile, username, password);
+            showConnectionSelection(loadProfiles());
+        } catch (IllegalArgumentException exception) {
+            showInfo("接続先編集", "ユーザー名を確認してください。");
+            showProfileEdit(profile);
+        } catch (Exception exception) {
+            showInfo("接続先編集", "接続先情報を保存できませんでした。");
+            showProfileEdit(profile);
+        }
     }
 
     private void showConnectionForm() {

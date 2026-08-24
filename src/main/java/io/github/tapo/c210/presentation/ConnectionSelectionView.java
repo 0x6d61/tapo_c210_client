@@ -8,9 +8,11 @@ import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
@@ -21,10 +23,12 @@ public final class ConnectionSelectionView {
     public ConnectionSelectionView(
             List<CameraProfile> profiles,
             Consumer<CameraProfile> onProfileSelected,
+            Consumer<CameraProfile> onProfileEdit,
             Runnable onDiscover,
             Runnable onManualConnect) {
         Objects.requireNonNull(profiles, "profiles must not be null");
         Objects.requireNonNull(onProfileSelected, "onProfileSelected must not be null");
+        Objects.requireNonNull(onProfileEdit, "onProfileEdit must not be null");
         Objects.requireNonNull(onDiscover, "onDiscover must not be null");
         Objects.requireNonNull(onManualConnect, "onManualConnect must not be null");
 
@@ -32,16 +36,32 @@ public final class ConnectionSelectionView {
                 FXCollections.observableArrayList(profiles));
         profileList.setPlaceholder(new Label("保存済みカメラはありません"));
         profileList.setCellFactory(view -> new ListCell<>() {
+            private final MenuItem edit = new MenuItem("編集");
+            private final ContextMenu contextMenu = new ContextMenu(edit);
+
+            {
+                edit.setOnAction(event -> {
+                    var selected = getItem();
+                    if (selected != null) {
+                        onProfileEdit.accept(selected);
+                    }
+                });
+            }
+
             @Override
             protected void updateItem(CameraProfile profile, boolean empty) {
                 super.updateItem(profile, empty);
-                setText(empty || profile == null
-                        ? null
-                        : "%s%n%s · %s · %s".formatted(
-                                profile.displayName(),
-                                profile.host(),
-                                profile.username(),
-                                profile.streamQuality().name()));
+                if (empty || profile == null) {
+                    setText(null);
+                    setContextMenu(null);
+                } else {
+                    setText("%s%n%s · %s · %s".formatted(
+                            profile.displayName(),
+                            profile.host(),
+                            profile.username(),
+                            profile.streamQuality().name()));
+                    setContextMenu(contextMenu);
+                }
             }
         });
         profileList.setPrefHeight(280);
@@ -63,7 +83,7 @@ public final class ConnectionSelectionView {
         root = new VBox(
                 12,
                 new Label("接続先を選択"),
-                new Label("保存済みプロファイルにはパスワードを表示しません。"),
+                new Label("保存済みプロファイルにはパスワードを表示しません。カメラを右クリックすると編集できます。"),
                 profileList,
                 actions);
         root.setPadding(new Insets(20));
