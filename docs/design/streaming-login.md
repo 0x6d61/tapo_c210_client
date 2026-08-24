@@ -293,7 +293,7 @@ MotionEvent
   source
 ```
 
-`CameraProfile` はパスワードを持たない。`CameraCredentials` は復号後にメモリ上でのみ扱い、接続終了後に保持し続けない設計にする。機能の有無は `CameraCapabilities` で表現し、対応しない操作をUIから無理に実行しない。
+`CameraProfile` はパスワードを持たない。`CameraCredentials` はSQLiteから読み出した接続時にメモリ上で扱い、接続終了後に保持し続けない設計にする。機能の有無は `CameraCapabilities` で表現し、対応しない操作をUIから無理に実行しない。
 
 ### 4.4 PortとAdapter
 
@@ -351,6 +351,10 @@ TalkbackService
 - `C210TalkbackAdapter`: 実機でプロトコルを確認できた場合だけ有効化
 - `SqliteProfileRepository` / `SqliteSecretStore`: SQLite JDBCでプロファイルとパスワードを管理
 
+初期アプリケーション層として、`ListSavedProfiles` と `ConnectWithProfile` を実装済みである。前者は保存済みプロファイルを
+Presentation層へ渡し、後者は選択されたプロファイルのパスワードを`SecretStore`から取得して、資格情報をURIへ埋め込まない
+`RtspConnectionRequest`を`RtspConnector`へ渡す。RTSPライブラリはこのPortの外側へ隔離する。
+
 ## 5. データ保存
 
 保存形式はSQLiteとする。SQLite JDBCドライバー（候補: Xerial SQLite JDBC）をMaven依存関係として追加し、保存場所はOSごとのアプリケーションデータディレクトリに置く。作業ディレクトリやリポジトリ直下には作らない。
@@ -371,7 +375,7 @@ CREATE TABLE camera_profiles (
     rtsp_port INTEGER NOT NULL DEFAULT 554,
     username TEXT NOT NULL,
     stream_quality TEXT NOT NULL DEFAULT 'HIGH',
-    last_used_at TEXT
+    last_used_at TEXT NOT NULL
 );
 
 CREATE TABLE camera_secrets (

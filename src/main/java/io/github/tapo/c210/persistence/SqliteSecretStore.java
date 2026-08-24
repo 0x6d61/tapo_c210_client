@@ -1,5 +1,6 @@
 package io.github.tapo.c210.persistence;
 
+import io.github.tapo.c210.application.port.SecretStore;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -8,7 +9,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Persists camera passwords in the local SQLite database. */
-public final class SqliteSecretStore {
+public final class SqliteSecretStore implements SecretStore {
     private final SqliteDatabase database;
 
     public SqliteSecretStore(SqliteDatabase database) {

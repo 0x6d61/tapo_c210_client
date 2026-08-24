@@ -1,5 +1,6 @@
 package io.github.tapo.c210.persistence;
 
+import io.github.tapo.c210.application.port.CameraProfileRepository;
 import io.github.tapo.c210.domain.CameraProfile;
 import io.github.tapo.c210.domain.StreamQuality;
 import java.sql.PreparedStatement;
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Persists camera profile metadata in SQLite. */
-public final class SqliteProfileRepository {
+public final class SqliteProfileRepository implements CameraProfileRepository {
     private final SqliteDatabase database;
 
     public SqliteProfileRepository(SqliteDatabase database) {
