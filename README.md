@@ -1,4 +1,4 @@
-# Tapo C219 Client
+# Tapo C210 Client
 
 Java で Wi-Fi カメラへ接続するクライアントです。開発ルールは [AGENTS.md](AGENTS.md) を参照してください。
 
