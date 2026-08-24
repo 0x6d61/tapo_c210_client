@@ -18,6 +18,8 @@ mvn verify
 RTSP再生にはVLCJ 4.8.3とLibVLCを使用します。実行時には対応するVLCのインストールまたは配布が必要です。VLCJはGPLv3のため、
 アプリケーションの配布形態とライセンスは実装完了前に確定します。
 
+ONVIF制御にはApache-2.0の`onvif-java` 1.3.2を使用します。実機依存のONVIF処理はAdapter内へ隔離します。
+
 ## 現在の状態
 
 次の基盤を実装済みです。
@@ -36,5 +38,6 @@ RTSP再生にはVLCJ 4.8.3とLibVLCを使用します。実行時には対応す
 - SQLite保存に失敗しても、成功済みのRTSPセッションを維持して警告を返す接続結果
 - VLCJ JavaFX `ImageViewVideoSurface` によるライブ映像画面への遷移と切断
 - カメラ能力モデルと、PTZ・ローカル録画・動体検知・音声通話のPort／ユースケース
+- `onvif-java` によるONVIF能力取得、PTZ操作、動体イベント購読Adapter
 
-次はONVIF能力取得を追加し、PTZ・動体検知・録画・音声通話の利用可否をストリーム画面へ反映します。
+次はONVIF Adapterをストリーム画面へ接続し、能力に応じてPTZ・動体検知を有効化します。ローカル録画と音声通話はそれぞれの実機Adapterを追加します。
