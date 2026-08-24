@@ -81,14 +81,16 @@ ONVIF WS-DiscoveryのProbeを同一LANへ送信し、ProbeMatchの応答から�
 
 ### 2.5 保存済みプロファイルと表示名
 
-前回入力したアカウントを選択できるよう、メタデータと秘密情報を分けて保存する。
+前回入力したアカウントを選択できるよう、SQLiteデータベースへプロファイルとパスワードを保存する。同一LAN内の個人利用を前提とし、パスワードはSQLiteへ平文保存する。
 
 - メタデータ: プロファイルID、表示名、IPアドレス、ポート、ユーザー名、画質、最終利用日時、検出したモデル
 - 秘密情報: プロファイルIDに紐づくパスワード
-- パスワード保存先: OSの資格情報ストアを使う `SecretStore` Port
-- OSの資格情報ストアが使えない場合: パスワードを平文保存せず、次回接続時に再入力を求める
+- 保存先: OSごとのアプリケーションデータディレクトリに置くSQLiteファイル
+- 保存方式: `camera_secrets.password` に平文で保存する。OS資格情報ストア、マスターパスワード、追加の暗号鍵は使わない
 - 保存は「この接続を記憶する」の明示的な選択時だけ行う
-- プロファイル削除時はメタデータと秘密情報を同時に削除する
+- プロファイル削除時はSQLiteのトランザクションでメタデータと秘密情報を同時に削除する
+
+SQLiteファイルにはOSのファイル権限を設定し、ログ・例外・SQLパラメータにはパスワードを出さない。SQLiteファイルのバックアップや共有時には、平文パスワードが含まれることを明示する。
 
 表示名はユーザー入力ではなく、次の規則で自動生成する。
 
@@ -97,7 +99,7 @@ ONVIF WS-DiscoveryのProbeを同一LANへ送信し、ProbeMatchの応答から�
 3. 同じ表示名が存在する場合は末尾に ` #2`、` #3` のような連番を付ける。
 4. IPアドレスが変わっても同じカメラとして扱える識別情報が取得できる場合は、表示名を再生成して更新する。
 
-メタデータファイルにパスワードを入れない。保存されたプロファイルの一覧にはパスワードを表示せず、必要な場合だけSecretStoreから再取得する。
+保存されたプロファイルの一覧にはパスワードを表示せず、接続開始時だけSQLiteから読み出す。
 
 ## 3. 画面遷移
 
@@ -207,7 +209,7 @@ RTSP再生領域に加え、次の操作領域を持つ。
 JavaFX UI
   └─ Application services / use cases
        ├─ CameraProfileRepository
-       ├─ SecretStore
+       ├─ SecretStore ── SQLite
        ├─ CameraDiscovery
        ├─ CameraCapabilityService
        ├─ RtspSessionFactory ── RTSP library adapter
@@ -291,7 +293,7 @@ MotionEvent
   source
 ```
 
-`CameraProfile` はパスワードを持たない。`CameraCredentials` はメモリ上でのみ扱い、接続終了後に保持し続けない設計にする。機能の有無は `CameraCapabilities` で表現し、対応しない操作をUIから無理に実行しない。
+`CameraProfile` はパスワードを持たない。`CameraCredentials` は復号後にメモリ上でのみ扱い、接続終了後に保持し続けない設計にする。機能の有無は `CameraCapabilities` で表現し、対応しない操作をUIから無理に実行しない。
 
 ### 4.4 PortとAdapter
 
@@ -347,40 +349,48 @@ TalkbackService
 - `RtspLibraryAdapter`: VLCJ/libVLCまたはFFmpeg系ライブラリによる再生
 - `RecordingLibraryAdapter`: ライブ映像のファイル保存
 - `C210TalkbackAdapter`: 実機でプロトコルを確認できた場合だけ有効化
+- `SqliteProfileRepository` / `SqliteSecretStore`: SQLite JDBCでプロファイルとパスワードを管理
 
 ## 5. データ保存
 
-メタデータの保存形式は初期実装ではJSONを候補とする。保存場所はOSごとのアプリケーションデータディレクトリを使い、作業ディレクトリやリポジトリ直下には作らない。
+保存形式はSQLiteとする。SQLite JDBCドライバー（候補: Xerial SQLite JDBC）をMaven依存関係として追加し、保存場所はOSごとのアプリケーションデータディレクトリに置く。作業ディレクトリやリポジトリ直下には作らない。
 
-保存例（パスワードは含めない）:
+スキーマ案:
 
-```json
-{
-  "version": 1,
-  "profiles": [
-    {
-      "id": "generated-profile-id",
-      "displayName": "Tapo C210 (192.168.1.20)",
-      "deviceId": "onvif-device-id",
-      "host": "192.168.1.20",
-      "onvifPort": 2020,
-      "rtspPort": 554,
-      "username": "camera-user",
-      "streamQuality": "HIGH",
-      "lastUsedAt": "2026-08-24T12:00:00Z"
-    }
-  ]
-}
+```sql
+CREATE TABLE schema_version (
+    version INTEGER NOT NULL
+);
+
+CREATE TABLE camera_profiles (
+    id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    device_id TEXT,
+    host TEXT NOT NULL,
+    onvif_port INTEGER NOT NULL DEFAULT 2020,
+    rtsp_port INTEGER NOT NULL DEFAULT 554,
+    username TEXT NOT NULL,
+    stream_quality TEXT NOT NULL DEFAULT 'HIGH',
+    last_used_at TEXT
+);
+
+CREATE TABLE camera_secrets (
+    profile_id TEXT PRIMARY KEY REFERENCES camera_profiles(id) ON DELETE CASCADE,
+    password TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ```
 
-ファイル更新は一時ファイルへの書き込み後に置換し、プロセス停止中に既存データを壊しにくくする。保存形式には将来の移行に備えてバージョンを持たせる。
+パスワードは `camera_secrets.password` に保存する。SQL層ではPreparedStatementを使い、パスワードをSQL文字列へ連結しない。平文保存は同一LAN内の個人利用という前提による明示的な判断であり、ログ、例外、画面一覧、診断情報には出さない。
+
+プロファイルとパスワードの保存、削除、表示名更新はSQLiteトランザクションで行う。スキーマ変更は `schema_version` を使ったマイグレーションで管理し、将来の項目追加で既存プロファイルを壊さない。
 
 ## 6. TDDでの実装順序
 
 1. `StreamQuality`、`RtspEndpoint`、`CameraProfileNameGenerator` のテストを先に作り、`stream1`／`stream2`、ポート既定値、自動表示名を確定する。
 2. IPアドレス、ONVIFポート、RTSPポート、ユーザー名、パスワードの入力バリデーターを実装する。
 3. `CameraDiscovery` のPortとWS-Discoveryメッセージのテストダブルを作り、複数応答、重複、タイムアウト、キャンセルをテストする。
-4. `CameraProfileRepository` と `SecretStore` のPort、およびファイル／資格情報ストアのテストダブルを作る。
+4. SQLiteのスキーマ、`SqliteProfileRepository`、`SqliteSecretStore` のPortを作り、パスワードの保存・取得・削除、SQLパラメータ化、トランザクション、マイグレーションをテストする。
 5. `ConnectWithCredentials`、`ConnectWithProfile`、`LoadCapabilities` のユースケースを偽のセッションとONVIF応答でテストする。
 6. 接続選択、検出結果、接続フォーム、接続中、ストリーム画面を作り、画面状態と操作ボタンの有効／無効をテストする。
 7. RTSPライブラリを使う最小POCを作り、C210実機で高画質 `stream1` を再生する。次に `stream2` を確認する。
@@ -407,13 +417,15 @@ TalkbackService
 - 誤った認証情報では、秘密情報を漏らさずに認証エラーを表示できる。
 - 接続タイムアウト時にUIが固まらず、再試行または入力修正へ進める。
 - プロファイル削除後、メタデータと保存済みパスワードの両方が削除される。
+- SQLiteデータベースから保存済みプロファイルとパスワードを再取得できる。
+- SQLiteの保存に失敗した場合、接続自体を不必要に失敗させず、パスワードを保存しない状態で接続を継続できる。
 
 ## 8. 未決定事項
 
 - 対応OSをWindows限定にするか、macOS/Linuxも対象にするか
 - RTSP再生・録画ライブラリの最終選定（VLCJ/libVLCを第一候補）
 - JavaFX映像領域へのネイティブ映像埋め込み方式
-- OS資格情報ストアの実装方式と、対応できないOSでの挙動
+- SQLite JDBCドライバーのバージョンとネイティブSQLiteの配布方式
 - C210のハードウェアバージョン、ファームウェア、RTSP/ONVIF用カメラアカウントの準備状況
 - 双方向音声を実現するC210固有プロトコルの有無と実装可否
 - microSD録画をカメラ側で操作・再生するために利用できるプロトコルの範囲
