@@ -7,10 +7,12 @@ import io.github.tapo.c210.domain.StreamQuality;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.Consumer;
+import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
@@ -28,12 +30,16 @@ public final class StreamView {
     private final Label motionStatus;
     private final Label recordingStatus;
     private final Label talkbackStatus;
+    private final ComboBox<StreamQuality> streamQualitySelector;
     private final Button[] ptzButtons;
     private final Button recordingButton;
     private Consumer<PtzDirection> ptzAction = direction -> { };
+    private Consumer<StreamQuality> streamQualityAction = quality -> { };
     private Runnable ptzStopAction = () -> { };
     private Runnable recordingStartAction = () -> { };
     private Runnable recordingStopAction = () -> { };
+    private boolean streamQualityConfigured;
+    private boolean updatingStreamQuality;
     private boolean recording;
 
     public StreamView(Runnable onDisconnect) {
@@ -70,6 +76,17 @@ public final class StreamView {
         down.setOnAction(event -> ptzAction.accept(PtzDirection.TILT_DOWN));
         stop.setOnAction(event -> ptzStopAction.run());
 
+        streamQualitySelector = new ComboBox<>(
+                FXCollections.observableArrayList(StreamQuality.values()));
+        streamQualitySelector.setValue(StreamQuality.HIGH);
+        streamQualitySelector.setDisable(true);
+        streamQualitySelector.setOnAction(event -> {
+            var quality = streamQualitySelector.getValue();
+            if (!updatingStreamQuality && quality != null) {
+                streamQualityAction.accept(quality);
+            }
+        });
+
         var ptzPad = new GridPane();
         ptzPad.setHgap(6);
         ptzPad.setVgap(6);
@@ -83,6 +100,8 @@ public final class StreamView {
                 8,
                 new Label("カメラ操作"),
                 capabilityStatus,
+                new Label("ストリーム画質"),
+                streamQualitySelector,
                 new Label("PTZ"),
                 ptzPad,
                 motionStatus,
@@ -125,6 +144,7 @@ public final class StreamView {
     }
 
     public void showPlaying(String displayName, StreamQuality quality) {
+        selectStreamQuality(quality);
         status.setText("再生中: %s · %s".formatted(displayName, quality == StreamQuality.HIGH
                 ? "高画質"
                 : "低画質"));
@@ -132,6 +152,28 @@ public final class StreamView {
 
     public void showWarning(String message) {
         status.setText("再生中（警告）: " + message);
+    }
+
+    public void setStreamQualityAction(Consumer<StreamQuality> onChange) {
+        streamQualityAction = Objects.requireNonNull(onChange, "onChange must not be null");
+        streamQualityConfigured = true;
+        setStreamQualityEnabled(true);
+    }
+
+    public void showQualityChanging(StreamQuality quality) {
+        selectStreamQuality(quality);
+        streamQualitySelector.setDisable(true);
+        status.setText("画質を切り替え中…");
+    }
+
+    public void showQualityChangeError(StreamQuality fallback) {
+        selectStreamQuality(fallback);
+        setStreamQualityEnabled(true);
+        status.setText("画質変更失敗（現在の画質で再生中）");
+    }
+
+    public void setStreamQualityEnabled(boolean enabled) {
+        streamQualitySelector.setDisable(!streamQualityConfigured || !enabled);
     }
 
     public void setPtzActions(Consumer<PtzDirection> onMove, Runnable onStop) {
@@ -155,18 +197,21 @@ public final class StreamView {
         Objects.requireNonNull(output, "output must not be null");
         recording = true;
         recordingButton.setText("録画停止");
+        streamQualitySelector.setDisable(true);
         recordingStatus.setText("録画中（映像のみ）: " + output.getFileName());
     }
 
     public void showRecordingStopped() {
         recording = false;
         recordingButton.setText("録画開始");
+        setStreamQualityEnabled(true);
         showRecordingAvailable();
     }
 
     public void showRecordingError() {
         recording = false;
         recordingButton.setText("録画開始");
+        setStreamQualityEnabled(true);
         recordingStatus.setText("ローカル録画: 開始できませんでした");
     }
 
@@ -201,6 +246,16 @@ public final class StreamView {
     private void setPtzEnabled(boolean enabled) {
         for (var button : ptzButtons) {
             button.setDisable(!enabled);
+        }
+    }
+
+    private void selectStreamQuality(StreamQuality quality) {
+        Objects.requireNonNull(quality, "quality must not be null");
+        updatingStreamQuality = true;
+        try {
+            streamQualitySelector.setValue(quality);
+        } finally {
+            updatingStreamQuality = false;
         }
     }
 

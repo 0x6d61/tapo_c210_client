@@ -14,6 +14,7 @@ import io.github.tapo.c210.application.RecordingSession;
 import io.github.tapo.c210.application.StartRecording;
 import io.github.tapo.c210.application.StopCameraMovement;
 import io.github.tapo.c210.application.StopRecording;
+import io.github.tapo.c210.application.SwitchStreamQuality;
 import io.github.tapo.c210.application.ValidatedConnectionForm;
 import io.github.tapo.c210.application.port.MotionEventSubscription;
 import io.github.tapo.c210.application.port.RtspConnector;
@@ -23,6 +24,7 @@ import io.github.tapo.c210.domain.CameraDevice;
 import io.github.tapo.c210.domain.CameraProfile;
 import io.github.tapo.c210.domain.PtzCommand;
 import io.github.tapo.c210.domain.PtzDirection;
+import io.github.tapo.c210.domain.StreamQuality;
 import io.github.tapo.c210.persistence.SqliteDatabase;
 import io.github.tapo.c210.persistence.SqliteProfileRepository;
 import io.github.tapo.c210.persistence.SqliteSecretStore;
@@ -37,6 +39,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -55,6 +58,7 @@ public final class CameraClientApplication extends Application {
     private Task<CameraCapabilities> capabilityTask;
     private VlcjRtspConnector rtspConnector;
     private ConnectedCamera activeSession;
+    private ActiveStreamConnection activeConnection;
     private RecordingSession recordingSession;
     private StreamView activeStreamView;
     private OnvifCameraAdapter onvifAdapter;
@@ -183,6 +187,8 @@ public final class CameraClientApplication extends Application {
         try {
             var password = new SqliteSecretStore(database).load(profile.id())
                     .orElseThrow(() -> new IllegalStateException("saved camera password is missing"));
+            var camera = profileDevice(profile);
+            var credentials = new CameraCredentials(profile.username(), password);
             var connector = openRtspConnector();
             RtspConnector adapter = request -> connector.connect(request, view.imageView());
             activeSession = new ConnectWithProfile(
@@ -190,14 +196,17 @@ public final class CameraClientApplication extends Application {
                     new SqliteSecretStore(database),
                     adapter)
                     .execute(profile.id());
+            activeConnection = new ActiveStreamConnection(
+                    profile.displayName(), camera, credentials, profile.streamQuality());
             activeStreamView = view;
             view.showPlaying(profile.displayName(), profile.streamQuality());
+            prepareStreamQuality(view);
             prepareRecording(view);
             preparePtz(view);
             startCapabilityLoading(
                     view,
-                    profileDevice(profile),
-                    new CameraCredentials(profile.username(), password));
+                    camera,
+                    credentials);
         } catch (LibVlcUnavailableException exception) {
             cancelCapabilities();
             closeActiveSession();
@@ -228,14 +237,19 @@ public final class CameraClientApplication extends Application {
             var displayName = result.savedProfile()
                     .map(CameraProfile::displayName)
                     .orElseGet(() -> "%s:%d".formatted(form.host(), form.rtspPort()));
+            var camera = discoveredDevice.orElseGet(() -> manualDevice(form));
+            var credentials = new CameraCredentials(form.username(), form.password());
+            activeConnection = new ActiveStreamConnection(
+                    displayName, camera, credentials, form.streamQuality());
             view.showPlaying(displayName, form.streamQuality());
+            prepareStreamQuality(view);
             prepareRecording(view);
             result.persistenceWarning().ifPresent(view::showWarning);
             preparePtz(view);
             startCapabilityLoading(
                     view,
-                    discoveredDevice.orElseGet(() -> manualDevice(form)),
-                    new CameraCredentials(form.username(), form.password()));
+                    camera,
+                    credentials);
         } catch (LibVlcUnavailableException exception) {
             cancelCapabilities();
             closeActiveSession();
@@ -271,6 +285,59 @@ public final class CameraClientApplication extends Application {
         view.setPtzActions(
                 direction -> movePtz(direction),
                 this::stopPtz);
+    }
+
+    private void prepareStreamQuality(StreamView view) {
+        view.setStreamQualityAction(quality -> switchStreamQuality(view, quality));
+    }
+
+    private void switchStreamQuality(StreamView view, StreamQuality quality) {
+        var current = activeConnection;
+        var currentSession = activeSession;
+        var connector = rtspConnector;
+        if (current == null || currentSession == null || connector == null
+                || quality == current.quality()) {
+            return;
+        }
+
+        var replacementConnection = current.withQuality(quality);
+        view.showQualityChanging(quality);
+        var task = new Task<ConnectedCamera>() {
+            @Override
+            protected ConnectedCamera call() throws Exception {
+                RtspConnector adapter = request -> connector.connect(request, view.imageView());
+                return new SwitchStreamQuality(adapter).execute(
+                        currentSession,
+                        replacementConnection.camera().host(),
+                        replacementConnection.camera().rtspPort(),
+                        replacementConnection.credentials(),
+                        replacementConnection.quality());
+            }
+        };
+        task.setOnSucceeded(event -> {
+            if (activeSession != currentSession || activeConnection != current) {
+                closeQuietly(task.getValue());
+                return;
+            }
+            activeSession = task.getValue();
+            activeConnection = replacementConnection;
+            cancelCapabilities();
+            view.showPlaying(replacementConnection.displayName(), replacementConnection.quality());
+            view.setStreamQualityEnabled(true);
+            startCapabilityLoading(
+                    view,
+                    replacementConnection.camera(),
+                    replacementConnection.credentials());
+        });
+        task.setOnFailed(event -> {
+            if (activeSession == currentSession && activeConnection == current) {
+                view.showQualityChangeError(current.quality());
+            }
+        });
+
+        var worker = new Thread(task, "tapo-c210-quality-switch");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private void startCapabilityLoading(
@@ -493,6 +560,7 @@ public final class CameraClientApplication extends Application {
 
     private void closeActiveSession() {
         if (activeSession == null) {
+            activeConnection = null;
             return;
         }
         try {
@@ -501,6 +569,15 @@ public final class CameraClientApplication extends Application {
             // The UI is already leaving the stream screen; cleanup is best effort.
         } finally {
             activeSession = null;
+            activeConnection = null;
+        }
+    }
+
+    private static void closeQuietly(ConnectedCamera session) {
+        try {
+            session.close();
+        } catch (Exception ignored) {
+            // A replacement session created after the user disconnected is best-effort cleanup.
         }
     }
 
@@ -518,5 +595,22 @@ public final class CameraClientApplication extends Application {
                 "RTSP映像の再生に必要な64-bit版VLC/libVLCが見つからないか、読み込めません。"
                         + "\nVLCをインストールしてからアプリを再起動してください。"
                         + "\nhttps://www.videolan.org/vlc/");
+    }
+
+    private record ActiveStreamConnection(
+            String displayName,
+            CameraDevice camera,
+            CameraCredentials credentials,
+            StreamQuality quality) {
+        private ActiveStreamConnection {
+            Objects.requireNonNull(displayName, "displayName must not be null");
+            Objects.requireNonNull(camera, "camera must not be null");
+            Objects.requireNonNull(credentials, "credentials must not be null");
+            Objects.requireNonNull(quality, "quality must not be null");
+        }
+
+        private ActiveStreamConnection withQuality(StreamQuality replacement) {
+            return new ActiveStreamConnection(displayName, camera, credentials, replacement);
+        }
     }
 }
