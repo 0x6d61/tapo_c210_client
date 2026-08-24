@@ -359,6 +359,11 @@ JavaFXの初期画面として、保存済みプロファイルの選択画面�
 RTSPポート、ユーザー名、パスワード、ストリーム画質をネットワーク接続前に検証し、保存済みプロファイルはOSごとのアプリケー
 ションデータディレクトリにあるSQLiteから読み込む。RTSP接続AdapterとWS-Discoveryは次の実装単位である。
 
+WS-DiscoveryのPortとAdapterも実装済みである。`WsDiscoveryClient`はSOAP Probeを
+`239.255.255.250:3702`へ送信し、指定時間内のProbeMatchを収集する。解析には外部エンティティを無効化したXMLパーサーを使い、
+EndpointReference、XAddrs、Scopesからカメラ候補を生成する。応答の重複はdevice IDで除去し、不正な単一応答は他の応答を妨げない。
+JavaFXからの非同期起動と検出結果のフォーム引き継ぎは次の実装単位である。
+
 ## 5. データ保存
 
 保存形式はSQLiteとする。SQLite JDBCドライバー（候補: Xerial SQLite JDBC）をMaven依存関係として追加し、保存場所はOSごとのアプリケーションデータディレクトリに置く。作業ディレクトリやリポジトリ直下には作らない。

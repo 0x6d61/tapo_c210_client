@@ -26,5 +26,6 @@ mvn verify
 - パスワードをログや接続要求の文字列表現へ出さない境界
 - JavaFXの接続先選択画面、手動接続フォーム、入力エラー表示
 - OSごとのアプリケーションデータディレクトリへのSQLite接続
+- ONVIF WS-DiscoveryのProbe生成、ProbeMatch解析、UDP検出、重複排除
 
-次はONVIF WS-Discovery自動検出と、実際のRTSP再生Adapterを実装します。
+次はJavaFX画面から自動検出を非同期実行し、検出結果を接続フォームへ引き継ぎます。
