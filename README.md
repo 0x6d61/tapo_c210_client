@@ -35,8 +35,10 @@ ONVIF制御にはApache-2.0の`onvif-java` 1.3.2を使用します。実機依�
 - JavaFXの接続先選択画面、手動接続フォーム、入力エラー表示
 - OSごとのアプリケーションデータディレクトリへのSQLite接続
 - ONVIF WS-DiscoveryのProbe生成、ProbeMatch解析、UDP検出、重複排除
+- C210が返す旧WS-Discovery／WS-Addressing名前空間の解析と、マルチキャスト不可時の同一サブネット・ユニキャスト探索
 - JavaFXからの非同期カメラ検索と検出結果の接続フォーム引き継ぎ
 - VLCJ 4.8.3によるRTSP `stream1`／`stream2` 接続Adapterの基盤
+- JavaFX映像サーフェスをRTSPセッションが保持し、JNA callbackのGCによる映像出力失敗を防ぐ処理
 - VLC/libVLC未導入時の接続失敗を検出し、JavaFX画面へ導入案内を表示する処理
 - 入力した資格情報での接続ユースケースと、明示的に選んだ場合だけ行うプロファイル保存
 - SQLite保存に失敗しても、成功済みのRTSPセッションを維持して警告を返す接続結果

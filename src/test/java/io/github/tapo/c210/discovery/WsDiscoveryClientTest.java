@@ -39,6 +39,20 @@ class WsDiscoveryClientTest {
         assertTrue(transport.sentMessage == null);
     }
 
+    @Test
+    void sendsUnicastFallbackProbesToTheLocalSubnet() throws Exception {
+        var transport = new FakeTransport(List.of(probeMatch("camera-1")));
+        var client = new WsDiscoveryClient(
+                () -> transport,
+                new ProbeMatchParser(),
+                () -> List.of(new InetSocketAddress("192.168.11.15", 3702)));
+
+        var devices = client.discover(Duration.ofSeconds(1), () -> false);
+
+        assertEquals(1, devices.size());
+        assertTrue(transport.targets.contains(new InetSocketAddress("192.168.11.15", 3702)));
+    }
+
     private static String probeMatch(String deviceId) {
         return """
                 <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
@@ -54,6 +68,7 @@ class WsDiscoveryClientTest {
 
     private static final class FakeTransport implements WsDiscoveryTransport {
         private final Queue<String> responses;
+        private final List<InetSocketAddress> targets = new java.util.ArrayList<>();
         private InetSocketAddress target;
         private String sentMessage;
 
@@ -65,6 +80,7 @@ class WsDiscoveryClientTest {
         public void send(String message, InetSocketAddress target) {
             this.sentMessage = message;
             this.target = target;
+            targets.add(target);
         }
 
         @Override
