@@ -18,6 +18,7 @@
         <junit.jupiter.version>5.11.4</junit.jupiter.version>
         <sqlite.jdbc.version>3.53.2.1</sqlite.jdbc.version>
         <javafx.version>21.0.9</javafx.version>
+        <vlcj.version>4.8.3</vlcj.version>
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
         <maven.surefire.plugin.version>3.5.2</maven.surefire.plugin.version>
     </properties>
@@ -38,6 +39,11 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>uk.co.caprica</groupId>
+            <artifactId>vlcj</artifactId>
+            <version>${vlcj.version}</version>
         </dependency>
     </dependencies>
 
