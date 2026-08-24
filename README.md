@@ -20,7 +20,7 @@ Windowsでは、プロジェクトルートの`build.cmd`を実行すると、�
 build.cmd
 ```
 
-PowerShellからは`build.ps1`も実行できます。テストを省略する場合だけ、`build.cmd -SkipTests`を使用してください。
+PowerShellからは`build.ps1`も実行できます。テストを省略する場合だけ、`build.cmd -SkipTests`を使用してください。生成物を削除する場合は`build.cmd -Clean`を実行してください。`-Clean`は`target`を削除して終了します。
 
 生成されたJarは`target/tapo-c210-client-0.1.0-SNAPSHOT.jar`です。依存ライブラリと起動クラスを含む実行可能Jarなので、エクスプローラーからダブルクリックするか、次のコマンドで起動できます。
 
