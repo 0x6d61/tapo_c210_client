@@ -5,8 +5,11 @@ import io.github.tapo.c210.application.ConnectedCamera;
 import io.github.tapo.c210.application.RtspConnectionRequest;
 import io.github.tapo.c210.application.port.RtspConnector;
 import java.util.Objects;
+import java.util.function.Consumer;
+import javafx.scene.image.ImageView;
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory;
 import uk.co.caprica.vlcj.player.base.MediaPlayer;
+import uk.co.caprica.vlcj.javafx.videosurface.ImageViewVideoSurface;
 
 /** Opens an RTSP stream with VLCJ/libVLC without putting credentials in the MRL. */
 public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
@@ -25,7 +28,21 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
     @Override
     public ConnectedCamera connect(RtspConnectionRequest request)
             throws CameraConnectionException {
+        return connect(request, player -> { });
+    }
+
+    /** Opens a stream and attaches its decoded video frames to a JavaFX image view. */
+    public ConnectedCamera connect(RtspConnectionRequest request, ImageView imageView)
+            throws CameraConnectionException {
+        Objects.requireNonNull(imageView, "imageView must not be null");
+        return connect(request, player -> new ImageViewVideoSurface(imageView).attach(player));
+    }
+
+    private ConnectedCamera connect(
+            RtspConnectionRequest request, Consumer<MediaPlayer> videoSurfaceAttacher)
+            throws CameraConnectionException {
         Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(videoSurfaceAttacher, "videoSurfaceAttacher must not be null");
         if (closed) {
             throw new CameraConnectionException("RTSP connector is already closed");
         }
@@ -34,6 +51,7 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
         try {
             player = factory.mediaPlayers().newMediaPlayer();
             var options = VlcjRtspOptions.from(request);
+            videoSurfaceAttacher.accept(player);
             if (!player.media().play(options.mediaResource(), options.asVlcjOptions())) {
                 player.release();
                 throw new CameraConnectionException("LibVLC rejected the RTSP stream");

@@ -19,6 +19,7 @@
         <sqlite.jdbc.version>3.53.2.1</sqlite.jdbc.version>
         <javafx.version>21.0.9</javafx.version>
         <vlcj.version>4.8.3</vlcj.version>
+        <vlcj.javafx.version>1.2.0</vlcj.javafx.version>
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
         <maven.surefire.plugin.version>3.5.2</maven.surefire.plugin.version>
     </properties>
@@ -44,6 +45,11 @@
             <groupId>uk.co.caprica</groupId>
             <artifactId>vlcj</artifactId>
             <version>${vlcj.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>uk.co.caprica</groupId>
+            <artifactId>vlcj-javafx</artifactId>
+            <version>${vlcj.javafx.version}</version>
         </dependency>
     </dependencies>
 
