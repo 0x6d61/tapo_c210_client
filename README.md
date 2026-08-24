@@ -27,5 +27,6 @@ mvn verify
 - JavaFXの接続先選択画面、手動接続フォーム、入力エラー表示
 - OSごとのアプリケーションデータディレクトリへのSQLite接続
 - ONVIF WS-DiscoveryのProbe生成、ProbeMatch解析、UDP検出、重複排除
+- JavaFXからの非同期カメラ検索と検出結果の接続フォーム引き継ぎ
 
-次はJavaFX画面から自動検出を非同期実行し、検出結果を接続フォームへ引き継ぎます。
+次はRTSP再生Adapterとライブ映像表示を実装します。

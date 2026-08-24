@@ -362,7 +362,8 @@ RTSPポート、ユーザー名、パスワード、ストリーム画質をネ�
 WS-DiscoveryのPortとAdapterも実装済みである。`WsDiscoveryClient`はSOAP Probeを
 `239.255.255.250:3702`へ送信し、指定時間内のProbeMatchを収集する。解析には外部エンティティを無効化したXMLパーサーを使い、
 EndpointReference、XAddrs、Scopesからカメラ候補を生成する。応答の重複はdevice IDで除去し、不正な単一応答は他の応答を妨げない。
-JavaFXからの非同期起動と検出結果のフォーム引き継ぎは次の実装単位である。
+JavaFXの「カメラを検索」からは`Task`で非同期実行し、検索中のスピナー、キャンセル、検出結果一覧を表示する。候補を選ぶと
+IPアドレス、ONVIFポート、RTSPポートを接続フォームへ引き継ぐ。RTSP再生Adapterは次の実装単位である。
 
 ## 5. データ保存
 

@@ -27,13 +27,23 @@ public final class ConnectionFormView {
     public ConnectionFormView(
             Runnable onBack,
             Consumer<ValidatedConnectionForm> onConnect) {
+        this("", 2020, 554, onBack, onConnect);
+    }
+
+    public ConnectionFormView(
+            String initialHost,
+            int initialOnvifPort,
+            int initialRtspPort,
+            Runnable onBack,
+            Consumer<ValidatedConnectionForm> onConnect) {
+        Objects.requireNonNull(initialHost, "initialHost must not be null");
         Objects.requireNonNull(onBack, "onBack must not be null");
         Objects.requireNonNull(onConnect, "onConnect must not be null");
 
-        var host = new TextField();
+        var host = new TextField(initialHost);
         host.setPromptText("192.168.1.20");
-        var onvifPort = new TextField("2020");
-        var rtspPort = new TextField("554");
+        var onvifPort = new TextField(Integer.toString(initialOnvifPort));
+        var rtspPort = new TextField(Integer.toString(initialRtspPort));
         var username = new TextField();
         var password = new PasswordField();
         var streamQuality = new ComboBox<StreamQuality>(
