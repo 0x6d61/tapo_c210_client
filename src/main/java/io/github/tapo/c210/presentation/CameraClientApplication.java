@@ -11,6 +11,7 @@ import io.github.tapo.c210.application.ListSavedProfiles;
 import io.github.tapo.c210.application.MoveCamera;
 import io.github.tapo.c210.application.StopCameraMovement;
 import io.github.tapo.c210.application.ValidatedConnectionForm;
+import io.github.tapo.c210.application.port.MotionEventSubscription;
 import io.github.tapo.c210.application.port.RtspConnector;
 import io.github.tapo.c210.discovery.WsDiscoveryClient;
 import io.github.tapo.c210.domain.CameraCapabilities;
@@ -30,6 +31,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -45,6 +47,7 @@ public final class CameraClientApplication extends Application {
     private VlcjRtspConnector rtspConnector;
     private ConnectedCamera activeSession;
     private OnvifCameraAdapter onvifAdapter;
+    private MotionEventSubscription motionSubscription;
     private CameraCapabilities capabilities = CameraCapabilities.none();
 
     public static void main(String[] args) {
@@ -249,7 +252,22 @@ public final class CameraClientApplication extends Application {
             protected CameraCapabilities call() throws Exception {
                 var adapter = OnvifCameraAdapter.connect(camera, credentials, Duration.ofSeconds(8));
                 onvifAdapter = adapter;
-                return adapter.load();
+                var detected = adapter.load();
+                if (detected.motionEvents()) {
+                    try {
+                        motionSubscription = adapter.subscribe(
+                                event -> Platform.runLater(() -> view.showMotionEvent(event)));
+                    } catch (CameraControlException ignored) {
+                        // Keep PTZ and live video available when event subscription is not supported.
+                        detected = new CameraCapabilities(
+                                detected.ptz(),
+                                detected.localRecording(),
+                                detected.cameraStorageRecording(),
+                                false,
+                                detected.talkback());
+                    }
+                }
+                return detected;
             }
         };
         capabilityTask = task;
@@ -316,6 +334,15 @@ public final class CameraClientApplication extends Application {
         if (capabilityTask != null) {
             capabilityTask.cancel();
             capabilityTask = null;
+        }
+        if (motionSubscription != null) {
+            try {
+                motionSubscription.close();
+            } catch (CameraControlException ignored) {
+                // Cleanup is best effort while leaving the stream screen.
+            } finally {
+                motionSubscription = null;
+            }
         }
         if (onvifAdapter != null) {
             onvifAdapter.close();
