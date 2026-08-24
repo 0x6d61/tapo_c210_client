@@ -2,6 +2,7 @@ package io.github.tapo.c210.streaming;
 
 import io.github.tapo.c210.application.CameraConnectionException;
 import io.github.tapo.c210.application.ConnectedCamera;
+import io.github.tapo.c210.application.LibVlcUnavailableException;
 import io.github.tapo.c210.application.RtspConnectionRequest;
 import io.github.tapo.c210.application.RecordingSession;
 import io.github.tapo.c210.application.port.RtspConnector;
@@ -25,8 +26,7 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
         try {
             factory = new MediaPlayerFactory();
         } catch (UnsatisfiedLinkError error) {
-            throw new CameraConnectionException(
-                    "LibVLC native libraries could not be loaded", error);
+            throw new LibVlcUnavailableException(error);
         }
     }
 

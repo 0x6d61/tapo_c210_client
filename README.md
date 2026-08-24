@@ -6,6 +6,7 @@ Java で Wi-Fi カメラへ接続するクライアントです。開発ルー�
 
 - Java 21 以上
 - Maven 3.9 以上
+- 64bit版VLC（LibVLCを含む）
 
 ## ビルドとテスト
 
@@ -17,6 +18,8 @@ mvn verify
 
 RTSP再生にはVLCJ 4.8.3とLibVLCを使用します。実行時には対応するVLCのインストールまたは配布が必要です。VLCJはGPLv3のため、
 アプリケーションの配布形態とライセンスは実装完了前に確定します。
+
+Windowsでは、Javaと同じ64bitのVLCをインストールしてください。未導入または読み込み失敗の場合、接続画面でVLCの導入が必要であることを表示します。
 
 ONVIF制御にはApache-2.0の`onvif-java` 1.3.2を使用します。実機依存のONVIF処理はAdapter内へ隔離します。
 
@@ -34,6 +37,7 @@ ONVIF制御にはApache-2.0の`onvif-java` 1.3.2を使用します。実機依�
 - ONVIF WS-DiscoveryのProbe生成、ProbeMatch解析、UDP検出、重複排除
 - JavaFXからの非同期カメラ検索と検出結果の接続フォーム引き継ぎ
 - VLCJ 4.8.3によるRTSP `stream1`／`stream2` 接続Adapterの基盤
+- VLC/libVLC未導入時の接続失敗を検出し、JavaFX画面へ導入案内を表示する処理
 - 入力した資格情報での接続ユースケースと、明示的に選んだ場合だけ行うプロファイル保存
 - SQLite保存に失敗しても、成功済みのRTSPセッションを維持して警告を返す接続結果
 - VLCJ JavaFX `ImageViewVideoSurface` によるライブ映像画面への遷移と切断
