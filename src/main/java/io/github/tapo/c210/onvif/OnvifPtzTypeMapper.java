@@ -16,8 +16,6 @@ final class OnvifPtzTypeMapper {
             case PAN_RIGHT -> PtzType.RIGHT;
             case TILT_UP -> PtzType.UP;
             case TILT_DOWN -> PtzType.DOWN;
-            case ZOOM_IN -> PtzType.ZOOM_IN;
-            case ZOOM_OUT -> PtzType.ZOOM_OUT;
         };
     }
 }

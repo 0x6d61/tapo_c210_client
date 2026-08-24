@@ -59,10 +59,8 @@ public final class StreamView {
         var right = new Button("→");
         var up = new Button("↑");
         var down = new Button("↓");
-        var zoomIn = new Button("ズーム+");
-        var zoomOut = new Button("ズーム-");
         var stop = new Button("停止");
-        ptzButtons = new Button[] {left, right, up, down, zoomIn, zoomOut, stop};
+        ptzButtons = new Button[] {left, right, up, down, stop};
         for (var button : ptzButtons) {
             button.setDisable(true);
         }
@@ -70,8 +68,6 @@ public final class StreamView {
         right.setOnAction(event -> ptzAction.accept(PtzDirection.PAN_RIGHT));
         up.setOnAction(event -> ptzAction.accept(PtzDirection.TILT_UP));
         down.setOnAction(event -> ptzAction.accept(PtzDirection.TILT_DOWN));
-        zoomIn.setOnAction(event -> ptzAction.accept(PtzDirection.ZOOM_IN));
-        zoomOut.setOnAction(event -> ptzAction.accept(PtzDirection.ZOOM_OUT));
         stop.setOnAction(event -> ptzStopAction.run());
 
         var ptzPad = new GridPane();
@@ -82,8 +78,6 @@ public final class StreamView {
         ptzPad.add(stop, 1, 1);
         ptzPad.add(right, 2, 1);
         ptzPad.add(down, 1, 2);
-        ptzPad.add(zoomIn, 0, 3, 2, 1);
-        ptzPad.add(zoomOut, 2, 3);
         recordingButton = new Button("録画開始");
         var controls = new VBox(
                 8,
