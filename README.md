@@ -14,6 +14,14 @@ Java で Wi-Fi カメラへ接続するクライアントです。開発ルー�
 mvn verify
 ```
 
+Windowsでは、プロジェクトルートの`build.cmd`を実行すると、テストを含むMavenビルドを行い、生成されたJarの場所を表示します。
+
+```text
+build.cmd
+```
+
+PowerShellからは`build.ps1`も実行できます。テストを省略する場合だけ、`build.cmd -SkipTests`を使用してください。
+
 カメラ実機に依存しないテストを標準のビルドに含め、実機を使う統合テストは別途明示的に実行できる構成にします。
 
 RTSP再生にはVLCJ 4.8.3とLibVLCを使用します。実行時には対応するVLCのインストールまたは配布が必要です。VLCJはGPLv3のため、
