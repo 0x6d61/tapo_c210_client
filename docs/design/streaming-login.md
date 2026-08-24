@@ -347,7 +347,7 @@ TalkbackService
 実装Adapterは次の構成を想定する。
 
 - `OnvifWsDiscoveryAdapter`: UDPマルチキャストによる自動検出
-- `OnvifDeviceAdapter`: Device、Media、PTZ、Eventサービス呼び出し
+- `OnvifDeviceAdapter`: `onvif-java`によるDevice、Media、PTZ、Eventサービス呼び出し
 - `RtspLibraryAdapter`: VLCJ/libVLCまたはFFmpeg系ライブラリによる再生
 - `VlcjRtspConnector`: VLCJ 4.8.3へRTSP endpointと資格情報を分離して渡す
 - `RecordingLibraryAdapter`: ライブ映像のファイル保存
@@ -371,6 +371,8 @@ IPアドレス、ONVIFポート、RTSPポートを接続フォームへ引き継
 を低画質として選択し、ユーザー名とパスワードをVLCJオプションへ渡す。RTSP URIには資格情報を埋め込まない。保存済みプロファイル選択と
 手動接続のどちらも接続成功時にライブ映像画面へ遷移し、切断時にセッションを停止して選択画面へ戻る。
 PTZ、ローカル録画、動体検知、音声通話は、カメラ能力を確認してから実行するユースケースとPortを追加済みであり、未対応機能は実行前に拒否する。
+`OnvifCameraAdapter`はONVIFのPTZサービスとイベントサービスを能力へ変換し、一定時間後のPTZ停止と動体イベント購読を提供する。
+ONVIF能力だけではローカル録画とC210固有の音声通話を有効にせず、それぞれのAdapterが実機で確認できた場合だけ有効化する。
 
 ## 5. データ保存
 
