@@ -147,7 +147,7 @@ public final class StreamView {
 
     public void showRecordingAvailable() {
         if (!recording) {
-            recordingStatus.setText("ローカル録画: 利用可能（PC保存）");
+            recordingStatus.setText("ローカル録画: 利用可能（開始時に保存先を選択）");
         }
     }
 
