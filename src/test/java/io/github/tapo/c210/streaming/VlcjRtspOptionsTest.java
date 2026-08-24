@@ -8,6 +8,8 @@ import io.github.tapo.c210.application.CameraCredentials;
 import io.github.tapo.c210.application.RtspConnectionRequest;
 import io.github.tapo.c210.domain.RtspEndpoint;
 import io.github.tapo.c210.domain.StreamQuality;
+import java.nio.file.Path;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 class VlcjRtspOptionsTest {
@@ -31,5 +33,18 @@ class VlcjRtspOptionsTest {
                 new CameraCredentials("camera-user", "camera-password")));
 
         assertEquals("rtsp://192.168.1.20:554/stream2", options.mediaResource());
+    }
+
+    @Test
+    void addsAFileOutputToTheRecordingOptions() {
+        var options = VlcjRtspOptions.from(new RtspConnectionRequest(
+                new RtspEndpoint("192.168.1.20", 554, StreamQuality.HIGH),
+                new CameraCredentials("camera-user", "camera-password")));
+        var output = Path.of("recordings", "camera.mp4").toAbsolutePath();
+
+        var recordingOptions = Arrays.stream(options.asRecordingVlcjOptions(output)).toList();
+
+        assertTrue(recordingOptions.stream().anyMatch(option -> option.contains(":sout=#std")));
+        assertTrue(recordingOptions.stream().anyMatch(option -> option.contains(output.toString())));
     }
 }

@@ -4,6 +4,7 @@ import io.github.tapo.c210.domain.CameraCapabilities;
 import io.github.tapo.c210.domain.MotionEvent;
 import io.github.tapo.c210.domain.PtzDirection;
 import io.github.tapo.c210.domain.StreamQuality;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.Consumer;
 import javafx.geometry.Insets;
@@ -28,8 +29,12 @@ public final class StreamView {
     private final Label recordingStatus;
     private final Label talkbackStatus;
     private final Button[] ptzButtons;
+    private final Button recordingButton;
     private Consumer<PtzDirection> ptzAction = direction -> { };
     private Runnable ptzStopAction = () -> { };
+    private Runnable recordingStartAction = () -> { };
+    private Runnable recordingStopAction = () -> { };
+    private boolean recording;
 
     public StreamView(Runnable onDisconnect) {
         Objects.requireNonNull(onDisconnect, "onDisconnect must not be null");
@@ -79,6 +84,7 @@ public final class StreamView {
         ptzPad.add(down, 1, 2);
         ptzPad.add(zoomIn, 0, 3, 2, 1);
         ptzPad.add(zoomOut, 2, 3);
+        recordingButton = new Button("録画開始");
         var controls = new VBox(
                 8,
                 new Label("カメラ操作"),
@@ -87,7 +93,16 @@ public final class StreamView {
                 ptzPad,
                 motionStatus,
                 recordingStatus,
+                recordingButton,
                 talkbackStatus);
+        recordingButton.setDisable(true);
+        recordingButton.setOnAction(event -> {
+            if (recording) {
+                recordingStopAction.run();
+            } else {
+                recordingStartAction.run();
+            }
+        });
         controls.setPadding(new Insets(8, 12, 8, 0));
 
         var disconnect = new Button("切断");
@@ -130,12 +145,47 @@ public final class StreamView {
         ptzStopAction = Objects.requireNonNull(onStop, "onStop must not be null");
     }
 
+    public void setRecordingActions(Runnable onStart, Runnable onStop) {
+        recordingStartAction = Objects.requireNonNull(onStart, "onStart must not be null");
+        recordingStopAction = Objects.requireNonNull(onStop, "onStop must not be null");
+        recordingButton.setDisable(false);
+    }
+
+    public void showRecordingAvailable() {
+        if (!recording) {
+            recordingStatus.setText("ローカル録画: 利用可能（PC保存）");
+        }
+    }
+
+    public void showRecordingStarted(Path output) {
+        Objects.requireNonNull(output, "output must not be null");
+        recording = true;
+        recordingButton.setText("録画停止");
+        recordingStatus.setText("録画中: " + output.getFileName());
+    }
+
+    public void showRecordingStopped() {
+        recording = false;
+        recordingButton.setText("録画開始");
+        showRecordingAvailable();
+    }
+
+    public void showRecordingError() {
+        recording = false;
+        recordingButton.setText("録画開始");
+        recordingStatus.setText("ローカル録画: 開始できませんでした");
+    }
+
     public void showCapabilities(CameraCapabilities capabilities) {
         Objects.requireNonNull(capabilities, "capabilities must not be null");
         capabilityStatus.setText("能力取得完了");
         setPtzEnabled(capabilities.ptz());
         motionStatus.setText("動体検知: " + supportedText(capabilities.motionEvents()));
-        recordingStatus.setText("ローカル録画: " + supportedText(capabilities.localRecording()));
+        if (recordingButton.isDisabled()) {
+            recordingStatus.setText("ローカル録画: " + supportedText(capabilities.localRecording()));
+        } else if (!recording) {
+            showRecordingAvailable();
+        }
         talkbackStatus.setText("音声通話: " + supportedText(capabilities.talkback()));
     }
 
@@ -143,7 +193,9 @@ public final class StreamView {
         capabilityStatus.setText("能力取得失敗（映像は再生中）");
         setPtzEnabled(false);
         motionStatus.setText("動体検知: 利用不可");
-        recordingStatus.setText("ローカル録画: 未確認");
+        if (recordingButton.isDisabled()) {
+            recordingStatus.setText("ローカル録画: 未確認");
+        }
         talkbackStatus.setText("音声通話: 未確認");
     }
 

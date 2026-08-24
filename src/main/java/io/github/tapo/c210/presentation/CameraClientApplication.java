@@ -9,7 +9,10 @@ import io.github.tapo.c210.application.DiscoverCameras;
 import io.github.tapo.c210.application.ConnectedCamera;
 import io.github.tapo.c210.application.ListSavedProfiles;
 import io.github.tapo.c210.application.MoveCamera;
+import io.github.tapo.c210.application.RecordingSession;
+import io.github.tapo.c210.application.StartRecording;
 import io.github.tapo.c210.application.StopCameraMovement;
+import io.github.tapo.c210.application.StopRecording;
 import io.github.tapo.c210.application.ValidatedConnectionForm;
 import io.github.tapo.c210.application.port.MotionEventSubscription;
 import io.github.tapo.c210.application.port.RtspConnector;
@@ -23,11 +26,13 @@ import io.github.tapo.c210.persistence.SqliteDatabase;
 import io.github.tapo.c210.persistence.SqliteProfileRepository;
 import io.github.tapo.c210.persistence.SqliteSecretStore;
 import io.github.tapo.c210.onvif.OnvifCameraAdapter;
+import io.github.tapo.c210.streaming.VlcjRecordingEngine;
 import io.github.tapo.c210.streaming.VlcjRtspConnector;
+import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import javafx.application.Application;
@@ -46,6 +51,8 @@ public final class CameraClientApplication extends Application {
     private Task<CameraCapabilities> capabilityTask;
     private VlcjRtspConnector rtspConnector;
     private ConnectedCamera activeSession;
+    private RecordingSession recordingSession;
+    private StreamView activeStreamView;
     private OnvifCameraAdapter onvifAdapter;
     private MotionEventSubscription motionSubscription;
     private CameraCapabilities capabilities = CameraCapabilities.none();
@@ -69,6 +76,7 @@ public final class CameraClientApplication extends Application {
             discoveryTask.cancel();
         }
         cancelCapabilities();
+        stopRecording();
         closeActiveSession();
         if (rtspConnector != null) {
             rtspConnector.close();
@@ -178,7 +186,9 @@ public final class CameraClientApplication extends Application {
                     new SqliteSecretStore(database),
                     adapter)
                     .execute(profile.id());
+            activeStreamView = view;
             view.showPlaying(profile.displayName(), profile.streamQuality());
+            prepareRecording(view);
             preparePtz(view);
             startCapabilityLoading(
                     view,
@@ -205,10 +215,12 @@ public final class CameraClientApplication extends Application {
                     adapter)
                     .execute(form, discoveredDevice);
             activeSession = result.session();
+            activeStreamView = view;
             var displayName = result.savedProfile()
                     .map(CameraProfile::displayName)
                     .orElseGet(() -> "%s:%d".formatted(form.host(), form.rtspPort()));
             view.showPlaying(displayName, form.streamQuality());
+            prepareRecording(view);
             result.persistenceWarning().ifPresent(view::showWarning);
             preparePtz(view);
             startCapabilityLoading(
@@ -235,7 +247,9 @@ public final class CameraClientApplication extends Application {
 
     private void disconnectAndReturnToSelection() {
         cancelCapabilities();
+        stopRecording();
         closeActiveSession();
+        activeStreamView = null;
         showConnectionSelection(loadProfiles());
     }
 
@@ -349,6 +363,67 @@ public final class CameraClientApplication extends Application {
             onvifAdapter = null;
         }
         capabilities = CameraCapabilities.none();
+    }
+
+    private void prepareRecording(StreamView view) {
+        view.setRecordingActions(
+                () -> startRecording(view),
+                this::stopRecording);
+        view.showRecordingAvailable();
+    }
+
+    private void startRecording(StreamView view) {
+        if (recordingSession != null || activeSession == null || rtspConnector == null) {
+            return;
+        }
+        var camera = activeSession;
+        var output = nextRecordingPath();
+        var task = new Task<RecordingSession>() {
+            @Override
+            protected RecordingSession call() throws Exception {
+                return new StartRecording(
+                        CameraCapabilities.recordingOnly(),
+                        new VlcjRecordingEngine(rtspConnector))
+                        .execute(camera, output);
+            }
+        };
+        task.setOnSucceeded(event -> {
+            recordingSession = task.getValue();
+            view.showRecordingStarted(output);
+        });
+        task.setOnFailed(event -> view.showRecordingError());
+        var worker = new Thread(task, "tapo-c210-recording");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void stopRecording() {
+        var session = recordingSession;
+        if (session == null) {
+            return;
+        }
+        recordingSession = null;
+        var view = activeStreamView;
+        var task = new Task<Void>() {
+            @Override
+            protected Void call() throws Exception {
+                new StopRecording().execute(session);
+                return null;
+            }
+        };
+        task.setOnSucceeded(event -> {
+            if (view != null) {
+                view.showRecordingStopped();
+            }
+        });
+        var worker = new Thread(task, "tapo-c210-stop-recording");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private static Path nextRecordingPath() {
+        var directory = defaultDatabasePath().getParent().resolve("recordings");
+        return directory.resolve("c210-%s.mp4".formatted(Instant.now().toString().replace(":", "-")));
     }
 
     private static CameraDevice profileDevice(CameraProfile profile) {

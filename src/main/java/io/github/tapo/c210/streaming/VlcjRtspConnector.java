@@ -3,7 +3,12 @@ package io.github.tapo.c210.streaming;
 import io.github.tapo.c210.application.CameraConnectionException;
 import io.github.tapo.c210.application.ConnectedCamera;
 import io.github.tapo.c210.application.RtspConnectionRequest;
+import io.github.tapo.c210.application.RecordingSession;
 import io.github.tapo.c210.application.port.RtspConnector;
+import io.github.tapo.c210.application.CameraControlException;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.Consumer;
 import javafx.scene.image.ImageView;
@@ -38,6 +43,39 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
         return connect(request, player -> new ImageViewVideoSurface(imageView).attach(player));
     }
 
+    /** Starts a second VLCJ player that records the existing RTSP session to an MP4 file. */
+    public RecordingSession startRecording(ConnectedCamera camera, Path output)
+            throws CameraControlException {
+        Objects.requireNonNull(camera, "camera must not be null");
+        Objects.requireNonNull(output, "output must not be null");
+        if (closed) {
+            throw new CameraControlException("RTSP connector is already closed");
+        }
+        if (!(camera instanceof VlcjRtspSession session)) {
+            throw new CameraControlException("Recording requires a VLCJ RTSP session");
+        }
+        var absoluteOutput = output.toAbsolutePath().normalize();
+        createParentDirectory(absoluteOutput);
+        MediaPlayer recorder = null;
+        try {
+            recorder = factory.mediaPlayers().newMediaPlayer();
+            if (!recorder.media().play(
+                    session.options.mediaResource(),
+                    session.options.asRecordingVlcjOptions(absoluteOutput))) {
+                recorder.release();
+                throw new CameraControlException("LibVLC rejected the recording stream");
+            }
+            return new VlcjRecordingSession(recorder);
+        } catch (CameraControlException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            if (recorder != null) {
+                recorder.release();
+            }
+            throw new CameraControlException("Could not start local recording", exception);
+        }
+    }
+
     private ConnectedCamera connect(
             RtspConnectionRequest request, Consumer<MediaPlayer> videoSurfaceAttacher)
             throws CameraConnectionException {
@@ -56,7 +94,7 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
                 player.release();
                 throw new CameraConnectionException("LibVLC rejected the RTSP stream");
             }
-            return new VlcjRtspSession(player);
+            return new VlcjRtspSession(player, options);
         } catch (CameraConnectionException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -77,10 +115,12 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
 
     private static final class VlcjRtspSession implements ConnectedCamera {
         private final MediaPlayer player;
+        private final VlcjRtspOptions options;
         private boolean closed;
 
-        private VlcjRtspSession(MediaPlayer player) {
+        private VlcjRtspSession(MediaPlayer player, VlcjRtspOptions options) {
             this.player = player;
+            this.options = options;
         }
 
         @Override
@@ -90,6 +130,36 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
                 player.controls().stop();
                 player.release();
             }
+        }
+    }
+
+    private static final class VlcjRecordingSession implements RecordingSession {
+        private final MediaPlayer player;
+        private boolean stopped;
+
+        private VlcjRecordingSession(MediaPlayer player) {
+            this.player = player;
+        }
+
+        @Override
+        public void stop() {
+            if (!stopped) {
+                stopped = true;
+                player.controls().stop();
+                player.release();
+            }
+        }
+    }
+
+    private static void createParentDirectory(Path output) throws CameraControlException {
+        var parent = output.getParent();
+        if (parent == null) {
+            return;
+        }
+        try {
+            Files.createDirectories(parent);
+        } catch (IOException exception) {
+            throw new CameraControlException("Could not create the recording directory", exception);
         }
     }
 }
