@@ -1,8 +1,6 @@
 package io.github.tapo.c210.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.github.tapo.c210.application.port.CameraProfileRepository;
 import io.github.tapo.c210.application.port.SecretStore;
@@ -14,38 +12,28 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class UpdateCameraCredentialsTest {
+class UpdateSavedCameraProfileTest {
     @Test
-    void updatesUsernameAndPasswordTogether() throws Exception {
+    void updatesAllConnectionFieldsAndThePassword() throws Exception {
         var repository = new CapturingProfileRepository();
         var secrets = new CapturingSecretStore();
+        var form = new ValidatedConnectionForm(
+                "192.168.1.30",
+                2021,
+                855,
+                "new-user",
+                "new-password",
+                StreamQuality.LOW,
+                true);
 
-        new UpdateCameraCredentials(repository, secrets).execute(
-                profile(), "new-user", "new-password");
+        new UpdateSavedCameraProfile(repository, secrets).execute(profile(), form);
 
+        assertEquals("192.168.1.30", repository.saved.host());
+        assertEquals(2021, repository.saved.onvifPort());
+        assertEquals(855, repository.saved.rtspPort());
         assertEquals("new-user", repository.saved.username());
+        assertEquals(StreamQuality.LOW, repository.saved.streamQuality());
         assertEquals("new-password", secrets.savedPassword);
-    }
-
-    @Test
-    void leavesTheExistingPasswordWhenThePasswordFieldIsBlank() throws Exception {
-        var repository = new CapturingProfileRepository();
-        var secrets = new CapturingSecretStore();
-
-        new UpdateCameraCredentials(repository, secrets).execute(
-                profile(), "new-user", " ");
-
-        assertEquals("new-user", repository.saved.username());
-        assertFalse(secrets.wasSaved);
-    }
-
-    @Test
-    void rejectsABlankUsername() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new UpdateCameraCredentials(
-                        new CapturingProfileRepository(), new CapturingSecretStore())
-                        .execute(profile(), " ", "new-password"));
     }
 
     private static CameraProfile profile() {
@@ -82,12 +70,10 @@ class UpdateCameraCredentialsTest {
 
     private static final class CapturingSecretStore implements SecretStore {
         private String savedPassword;
-        private boolean wasSaved;
 
         @Override
         public void save(String profileId, String password) {
             savedPassword = password;
-            wasSaved = true;
         }
 
         @Override

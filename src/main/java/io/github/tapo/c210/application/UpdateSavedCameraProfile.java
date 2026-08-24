@@ -6,12 +6,12 @@ import io.github.tapo.c210.domain.CameraProfile;
 import java.sql.SQLException;
 import java.util.Objects;
 
-/** Updates a saved profile's username and, when supplied, its locally stored password. */
-public final class UpdateCameraCredentials {
+/** Updates all connection fields of a saved camera profile and its local password. */
+public final class UpdateSavedCameraProfile {
     private final CameraProfileRepository profileRepository;
     private final SecretStore secretStore;
 
-    public UpdateCameraCredentials(
+    public UpdateSavedCameraProfile(
             CameraProfileRepository profileRepository,
             SecretStore secretStore) {
         this.profileRepository = Objects.requireNonNull(
@@ -19,28 +19,21 @@ public final class UpdateCameraCredentials {
         this.secretStore = Objects.requireNonNull(secretStore, "secretStore must not be null");
     }
 
-    public void execute(CameraProfile profile, String username, String password)
+    public void execute(CameraProfile profile, ValidatedConnectionForm form)
             throws SQLException {
         Objects.requireNonNull(profile, "profile must not be null");
-        Objects.requireNonNull(username, "username must not be null");
-        Objects.requireNonNull(password, "password must not be null");
-        var normalizedUsername = username.trim();
-        if (normalizedUsername.isBlank()) {
-            throw new IllegalArgumentException("username must not be blank");
-        }
+        Objects.requireNonNull(form, "form must not be null");
 
         profileRepository.save(new CameraProfile(
                 profile.id(),
                 profile.displayName(),
                 profile.deviceId(),
-                profile.host(),
-                profile.onvifPort(),
-                profile.rtspPort(),
-                normalizedUsername,
-                profile.streamQuality(),
+                form.host(),
+                form.onvifPort(),
+                form.rtspPort(),
+                form.username(),
+                form.streamQuality(),
                 profile.lastUsedAt()));
-        if (!password.isBlank()) {
-            secretStore.save(profile.id(), password);
-        }
+        secretStore.save(profile.id(), form.password());
     }
 }
