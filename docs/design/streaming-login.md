@@ -29,7 +29,9 @@ Tapo C210を同一LAN上から操作するJavaFXデスクトップクライア�
 
 UIはJavaFXを正式採用する。JavaFXの画面・コントローラーはPresentation層に閉じ込め、通信・録画・カメラ制御のコードからJavaFX型を参照しない。
 
-RTSPのパケット処理やデコードは自前実装せず、RTSP対応ライブラリを使用する。最初のPOCではVLCJ/libVLCを第一候補とし、ネイティブランタイムの配布やJavaFX映像領域への埋め込みに問題があれば、FFmpeg系ライブラリへ差し替えられるよう `StreamPlayer` と `RecordingEngine` のAdapterで隔離する。Maven依存関係とネイティブランタイムの配布方法は、POCで確認してから確定する。
+RTSPのパケット処理やデコードは自前実装せず、RTSP対応ライブラリを使用する。最初のPOCではVLCJ/libVLCを採用し、ネイティブランタイムの配布やJavaFX映像領域への埋め込みに問題があれば、FFmpeg系ライブラリへ差し替えられるよう `StreamPlayer` と `RecordingEngine` のAdapterで隔離する。Maven依存関係とネイティブランタイムの配布方法は、POCで確認してから確定する。
+
+VLCJ 4.8.3はGPLv3であり、実行時にLibVLCのnativeライブラリを必要とする。したがって、VLCJ依存は`RtspConnector`のAdapter内に閉じ込め、CIではnative LibVLCを起動しない。配布時のVLC／VLCJライセンス方針は別途確定する。
 
 ### 2.2 C210のプロトコル分担
 
@@ -347,6 +349,7 @@ TalkbackService
 - `OnvifWsDiscoveryAdapter`: UDPマルチキャストによる自動検出
 - `OnvifDeviceAdapter`: Device、Media、PTZ、Eventサービス呼び出し
 - `RtspLibraryAdapter`: VLCJ/libVLCまたはFFmpeg系ライブラリによる再生
+- `VlcjRtspConnector`: VLCJ 4.8.3へRTSP endpointと資格情報を分離して渡す
 - `RecordingLibraryAdapter`: ライブ映像のファイル保存
 - `C210TalkbackAdapter`: 実機でプロトコルを確認できた場合だけ有効化
 - `SqliteProfileRepository` / `SqliteSecretStore`: SQLite JDBCでプロファイルとパスワードを管理
@@ -363,7 +366,9 @@ WS-DiscoveryのPortとAdapterも実装済みである。`WsDiscoveryClient`はSO
 `239.255.255.250:3702`へ送信し、指定時間内のProbeMatchを収集する。解析には外部エンティティを無効化したXMLパーサーを使い、
 EndpointReference、XAddrs、Scopesからカメラ候補を生成する。応答の重複はdevice IDで除去し、不正な単一応答は他の応答を妨げない。
 JavaFXの「カメラを検索」からは`Task`で非同期実行し、検索中のスピナー、キャンセル、検出結果一覧を表示する。候補を選ぶと
-IPアドレス、ONVIFポート、RTSPポートを接続フォームへ引き継ぐ。RTSP再生Adapterは次の実装単位である。
+IPアドレス、ONVIFポート、RTSPポートを接続フォームへ引き継ぐ。VLCJのRTSP Adapterは実装済みで、`stream1`を高画質、`stream2`
+を低画質として選択し、ユーザー名とパスワードをVLCJオプションへ渡す。RTSP URIには資格情報を埋め込まない。JavaFXの映像
+サーフェスへの接続とストリーム画面遷移は次の実装単位である。
 
 ## 5. データ保存
 
@@ -437,7 +442,7 @@ CREATE TABLE camera_secrets (
 ## 8. 未決定事項
 
 - 対応OSをWindows限定にするか、macOS/Linuxも対象にするか
-- RTSP再生・録画ライブラリの最終選定（VLCJ/libVLCを第一候補）
+- VLCJ/libVLCのnativeランタイム配布方法と、VLCJ GPLv3を踏まえたアプリケーション配布ライセンス
 - JavaFX映像領域へのネイティブ映像埋め込み方式
 - SQLite JDBCドライバーのバージョンとネイティブSQLiteの配布方式
 - C210のハードウェアバージョン、ファームウェア、RTSP/ONVIF用カメラアカウントの準備状況
