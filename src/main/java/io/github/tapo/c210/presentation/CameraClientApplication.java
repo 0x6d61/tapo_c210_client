@@ -1,14 +1,19 @@
 package io.github.tapo.c210.presentation;
 
-import io.github.tapo.c210.application.ValidatedConnectionForm;
-import io.github.tapo.c210.domain.CameraProfile;
 import io.github.tapo.c210.application.ListSavedProfiles;
+import io.github.tapo.c210.application.DiscoverCameras;
+import io.github.tapo.c210.application.ValidatedConnectionForm;
+import io.github.tapo.c210.discovery.WsDiscoveryClient;
+import io.github.tapo.c210.domain.CameraDevice;
+import io.github.tapo.c210.domain.CameraProfile;
 import io.github.tapo.c210.persistence.SqliteDatabase;
 import io.github.tapo.c210.persistence.SqliteProfileRepository;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.List;
 import javafx.application.Application;
+import javafx.concurrent.Task;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
@@ -18,6 +23,7 @@ import javafx.stage.Stage;
 public final class CameraClientApplication extends Application {
     private Stage stage;
     private SqliteDatabase database;
+    private Task<List<CameraDevice>> discoveryTask;
 
     public static void main(String[] args) {
         launch(args);
@@ -34,6 +40,9 @@ public final class CameraClientApplication extends Application {
 
     @Override
     public void stop() throws Exception {
+        if (discoveryTask != null) {
+            discoveryTask.cancel();
+        }
         if (database != null) {
             database.close();
         }
@@ -43,7 +52,7 @@ public final class CameraClientApplication extends Application {
         var view = new ConnectionSelectionView(
                 profiles,
                 this::showProfileNotWiredMessage,
-                this::showDiscoveryNotWiredMessage,
+                this::showDiscovery,
                 this::showConnectionForm);
         stage.setScene(new Scene(view.root(), 720, 480));
     }
@@ -53,6 +62,49 @@ public final class CameraClientApplication extends Application {
                 () -> showConnectionSelection(loadProfiles()),
                 this::showValidatedFormMessage);
         stage.setScene(new Scene(view.root(), 620, 480));
+    }
+
+    private void showConnectionForm(CameraDevice device) {
+        var view = new ConnectionFormView(
+                device.host(),
+                device.onvifPort(),
+                device.rtspPort(),
+                () -> showConnectionSelection(loadProfiles()),
+                this::showValidatedFormMessage);
+        stage.setScene(new Scene(view.root(), 620, 480));
+    }
+
+    private void showDiscovery() {
+        var view = new CameraDiscoveryView();
+        view.setOnCancel(() -> {
+            if (discoveryTask != null) {
+                discoveryTask.cancel();
+            }
+            showConnectionSelection(loadProfiles());
+        });
+        view.setOnSelect(device -> {
+            if (discoveryTask != null) {
+                discoveryTask.cancel();
+            }
+            showConnectionForm(device);
+        });
+        stage.setScene(new Scene(view.root(), 720, 480));
+
+        var task = new Task<List<CameraDevice>>() {
+            @Override
+            protected List<CameraDevice> call() throws Exception {
+                return new DiscoverCameras(new WsDiscoveryClient()).execute(
+                        Duration.ofSeconds(4), this::isCancelled);
+            }
+        };
+        discoveryTask = task;
+        task.setOnSucceeded(event -> view.showResults(task.getValue()));
+        task.setOnFailed(event -> view.showError());
+        task.setOnCancelled(event -> view.showCancelled());
+
+        var worker = new Thread(task, "tapo-c210-discovery");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private List<CameraProfile> loadProfiles() {
@@ -86,10 +138,6 @@ public final class CameraClientApplication extends Application {
     private void showProfileNotWiredMessage(CameraProfile profile) {
         showInfo("接続準備", "%sを選択しました。RTSP接続Adapterを次の実装で接続します。"
                 .formatted(profile.displayName()));
-    }
-
-    private void showDiscoveryNotWiredMessage() {
-        showInfo("自動検出", "ONVIF WS-Discoveryは次の実装で接続します。");
     }
 
     private void showValidatedFormMessage(ValidatedConnectionForm form) {
