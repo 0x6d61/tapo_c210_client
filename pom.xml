@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.github.0x6d61</groupId>
-    <artifactId>tapo-c219-client</artifactId>
+    <artifactId>tapo-c210-client</artifactId>
     <version>0.1.0-SNAPSHOT</version>
-    <name>Tapo C219 Client</name>
+    <name>Tapo C210 Client</name>
     <description>Java client for a Wi-Fi camera</description>
 
     <properties>
