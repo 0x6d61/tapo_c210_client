@@ -1,22 +1,31 @@
 package io.github.tapo.c210.presentation;
 
 import io.github.tapo.c210.application.CameraConnectionException;
+import io.github.tapo.c210.application.CameraControlException;
+import io.github.tapo.c210.application.CameraCredentials;
 import io.github.tapo.c210.application.ConnectWithCredentials;
 import io.github.tapo.c210.application.ConnectWithProfile;
 import io.github.tapo.c210.application.DiscoverCameras;
 import io.github.tapo.c210.application.ConnectedCamera;
 import io.github.tapo.c210.application.ListSavedProfiles;
+import io.github.tapo.c210.application.MoveCamera;
+import io.github.tapo.c210.application.StopCameraMovement;
 import io.github.tapo.c210.application.ValidatedConnectionForm;
 import io.github.tapo.c210.application.port.RtspConnector;
 import io.github.tapo.c210.discovery.WsDiscoveryClient;
+import io.github.tapo.c210.domain.CameraCapabilities;
 import io.github.tapo.c210.domain.CameraDevice;
 import io.github.tapo.c210.domain.CameraProfile;
+import io.github.tapo.c210.domain.PtzCommand;
+import io.github.tapo.c210.domain.PtzDirection;
 import io.github.tapo.c210.persistence.SqliteDatabase;
 import io.github.tapo.c210.persistence.SqliteProfileRepository;
 import io.github.tapo.c210.persistence.SqliteSecretStore;
+import io.github.tapo.c210.onvif.OnvifCameraAdapter;
 import io.github.tapo.c210.streaming.VlcjRtspConnector;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -32,8 +41,11 @@ public final class CameraClientApplication extends Application {
     private Stage stage;
     private SqliteDatabase database;
     private Task<List<CameraDevice>> discoveryTask;
+    private Task<CameraCapabilities> capabilityTask;
     private VlcjRtspConnector rtspConnector;
     private ConnectedCamera activeSession;
+    private OnvifCameraAdapter onvifAdapter;
+    private CameraCapabilities capabilities = CameraCapabilities.none();
 
     public static void main(String[] args) {
         launch(args);
@@ -53,6 +65,7 @@ public final class CameraClientApplication extends Application {
         if (discoveryTask != null) {
             discoveryTask.cancel();
         }
+        cancelCapabilities();
         closeActiveSession();
         if (rtspConnector != null) {
             rtspConnector.close();
@@ -153,6 +166,8 @@ public final class CameraClientApplication extends Application {
         var view = new StreamView(this::disconnectAndReturnToSelection);
         stage.setScene(new Scene(view.root(), 820, 560));
         try {
+            var password = new SqliteSecretStore(database).load(profile.id())
+                    .orElseThrow(() -> new IllegalStateException("saved camera password is missing"));
             var connector = openRtspConnector();
             RtspConnector adapter = request -> connector.connect(request, view.imageView());
             activeSession = new ConnectWithProfile(
@@ -161,7 +176,13 @@ public final class CameraClientApplication extends Application {
                     adapter)
                     .execute(profile.id());
             view.showPlaying(profile.displayName(), profile.streamQuality());
+            preparePtz(view);
+            startCapabilityLoading(
+                    view,
+                    profileDevice(profile),
+                    new CameraCredentials(profile.username(), password));
         } catch (Exception exception) {
+            cancelCapabilities();
             closeActiveSession();
             showInfo("接続失敗", "カメラに接続できませんでした。保存済みのパスワードと接続先を確認してください。");
             showConnectionSelection(loadProfiles());
@@ -186,10 +207,17 @@ public final class CameraClientApplication extends Application {
                     .orElseGet(() -> "%s:%d".formatted(form.host(), form.rtspPort()));
             view.showPlaying(displayName, form.streamQuality());
             result.persistenceWarning().ifPresent(view::showWarning);
+            preparePtz(view);
+            startCapabilityLoading(
+                    view,
+                    discoveredDevice.orElseGet(() -> manualDevice(form)),
+                    new CameraCredentials(form.username(), form.password()));
         } catch (CameraConnectionException exception) {
+            cancelCapabilities();
             showInfo("接続失敗", "RTSPストリームを開始できませんでした。接続先とカメラアカウントを確認してください。");
             showConnectionSelection(loadProfiles());
         } catch (Exception exception) {
+            cancelCapabilities();
             showInfo("接続失敗", "カメラに接続できませんでした。入力内容を確認してください。");
             showConnectionSelection(loadProfiles());
         }
@@ -203,8 +231,123 @@ public final class CameraClientApplication extends Application {
     }
 
     private void disconnectAndReturnToSelection() {
+        cancelCapabilities();
         closeActiveSession();
         showConnectionSelection(loadProfiles());
+    }
+
+    private void preparePtz(StreamView view) {
+        view.setPtzActions(
+                direction -> movePtz(direction),
+                this::stopPtz);
+    }
+
+    private void startCapabilityLoading(
+            StreamView view, CameraDevice camera, CameraCredentials credentials) {
+        var task = new Task<CameraCapabilities>() {
+            @Override
+            protected CameraCapabilities call() throws Exception {
+                var adapter = OnvifCameraAdapter.connect(camera, credentials, Duration.ofSeconds(8));
+                onvifAdapter = adapter;
+                return adapter.load();
+            }
+        };
+        capabilityTask = task;
+        task.setOnSucceeded(event -> {
+            if (capabilityTask == task) {
+                capabilities = task.getValue();
+                view.showCapabilities(capabilities);
+            }
+        });
+        task.setOnFailed(event -> {
+            if (capabilityTask == task) {
+                view.showCapabilitiesUnavailable();
+            }
+        });
+        task.setOnCancelled(event -> {
+            if (capabilityTask == task) {
+                view.showCapabilitiesUnavailable();
+            }
+        });
+
+        var worker = new Thread(task, "tapo-c210-capabilities");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void movePtz(PtzDirection direction) {
+        var adapter = onvifAdapter;
+        if (adapter == null) {
+            return;
+        }
+        var task = new Task<Void>() {
+            @Override
+            protected Void call() throws CameraControlException {
+                new MoveCamera(capabilities, adapter).execute(
+                        new PtzCommand(direction, 0.5, Duration.ofMillis(500)));
+                return null;
+            }
+        };
+        runControlTask(task);
+    }
+
+    private void stopPtz() {
+        var adapter = onvifAdapter;
+        if (adapter == null) {
+            return;
+        }
+        var task = new Task<Void>() {
+            @Override
+            protected Void call() throws CameraControlException {
+                new StopCameraMovement(capabilities, adapter).execute();
+                return null;
+            }
+        };
+        runControlTask(task);
+    }
+
+    private void runControlTask(Task<Void> task) {
+        var worker = new Thread(task, "tapo-c210-control");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void cancelCapabilities() {
+        if (capabilityTask != null) {
+            capabilityTask.cancel();
+            capabilityTask = null;
+        }
+        if (onvifAdapter != null) {
+            onvifAdapter.close();
+            onvifAdapter = null;
+        }
+        capabilities = CameraCapabilities.none();
+    }
+
+    private static CameraDevice profileDevice(CameraProfile profile) {
+        return new CameraDevice(
+                profile.deviceId() == null ? profile.id() : profile.deviceId(),
+                profile.host(),
+                profile.onvifPort(),
+                profile.rtspPort(),
+                URI.create("http://%s:%d/onvif/device_service"
+                        .formatted(profile.host(), profile.onvifPort())),
+                null,
+                null,
+                null);
+    }
+
+    private static CameraDevice manualDevice(ValidatedConnectionForm form) {
+        return new CameraDevice(
+                "manual:%s:%d".formatted(form.host(), form.onvifPort()),
+                form.host(),
+                form.onvifPort(),
+                form.rtspPort(),
+                URI.create("http://%s:%d/onvif/device_service"
+                        .formatted(form.host(), form.onvifPort())),
+                null,
+                null,
+                null);
     }
 
     private void closeActiveSession() {

@@ -39,5 +39,6 @@ ONVIF制御にはApache-2.0の`onvif-java` 1.3.2を使用します。実機依�
 - VLCJ JavaFX `ImageViewVideoSurface` によるライブ映像画面への遷移と切断
 - カメラ能力モデルと、PTZ・ローカル録画・動体検知・音声通話のPort／ユースケース
 - `onvif-java` によるONVIF能力取得、PTZ操作、動体イベント購読Adapter
+- RTSP接続後の非同期ONVIF能力取得と、能力確認後に有効化されるJavaFX PTZ操作
 
-次はONVIF Adapterをストリーム画面へ接続し、能力に応じてPTZ・動体検知を有効化します。ローカル録画と音声通話はそれぞれの実機Adapterを追加します。
+次は動体イベントを画面へ通知し、ローカル録画と音声通話はそれぞれの実機Adapterを追加します。
