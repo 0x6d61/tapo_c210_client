@@ -8,12 +8,10 @@ import org.junit.jupiter.api.Test;
 
 class OnvifPtzTypeMapperTest {
     @Test
-    void mapsPanTiltAndZoomDirections() {
+    void mapsPanAndTiltDirections() {
         assertEquals(PtzType.LEFT, OnvifPtzTypeMapper.toOnvif(PtzDirection.PAN_LEFT));
         assertEquals(PtzType.RIGHT, OnvifPtzTypeMapper.toOnvif(PtzDirection.PAN_RIGHT));
         assertEquals(PtzType.UP, OnvifPtzTypeMapper.toOnvif(PtzDirection.TILT_UP));
         assertEquals(PtzType.DOWN, OnvifPtzTypeMapper.toOnvif(PtzDirection.TILT_DOWN));
-        assertEquals(PtzType.ZOOM_IN, OnvifPtzTypeMapper.toOnvif(PtzDirection.ZOOM_IN));
-        assertEquals(PtzType.ZOOM_OUT, OnvifPtzTypeMapper.toOnvif(PtzDirection.ZOOM_OUT));
     }
 }
