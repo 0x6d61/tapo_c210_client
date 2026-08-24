@@ -1,6 +1,7 @@
 package io.github.tapo.c210.presentation;
 
 import io.github.tapo.c210.domain.CameraCapabilities;
+import io.github.tapo.c210.domain.MotionEvent;
 import io.github.tapo.c210.domain.PtzDirection;
 import io.github.tapo.c210.domain.StreamQuality;
 import java.util.Objects;
@@ -144,6 +145,11 @@ public final class StreamView {
         motionStatus.setText("動体検知: 利用不可");
         recordingStatus.setText("ローカル録画: 未確認");
         talkbackStatus.setText("音声通話: 未確認");
+    }
+
+    public void showMotionEvent(MotionEvent event) {
+        Objects.requireNonNull(event, "event must not be null");
+        motionStatus.setText("動体検知: %s (%s)".formatted(event.type(), event.occurredAt()));
     }
 
     private void setPtzEnabled(boolean enabled) {
