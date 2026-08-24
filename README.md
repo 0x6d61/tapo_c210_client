@@ -22,6 +22,14 @@ build.cmd
 
 PowerShellからは`build.ps1`も実行できます。テストを省略する場合だけ、`build.cmd -SkipTests`を使用してください。
 
+生成されたJarは`target/tapo-c210-client-0.1.0-SNAPSHOT.jar`です。依存ライブラリと起動クラスを含む実行可能Jarなので、エクスプローラーからダブルクリックするか、次のコマンドで起動できます。
+
+```text
+java -jar target/tapo-c210-client-0.1.0-SNAPSHOT.jar
+```
+
+RTSP映像を表示するには、別途64-bit版VLC/libVLCのインストールが必要です。
+
 カメラ実機に依存しないテストを標準のビルドに含め、実機を使う統合テストは別途明示的に実行できる構成にします。
 
 RTSP再生にはVLCJ 4.8.3とLibVLCを使用します。実行時には対応するVLCのインストールまたは配布が必要です。VLCJはGPLv3のため、
