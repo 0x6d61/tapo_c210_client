@@ -41,9 +41,10 @@ public final class VlcjRtspOptions {
         Objects.requireNonNull(output, "output must not be null");
         var base = asVlcjOptions();
         var recording = new String[] {
-            ":sout=#std{access=file,mux=mp4,dst=\"%s\"}".formatted(
+            ":sout=#transcode{vcodec=copy,acodec=none}:std{access=file,mux=mp4,dst=\"%s\"}".formatted(
                     output.toAbsolutePath().normalize()),
-            ":sout-keep"
+            ":sout-keep",
+            ":vout=dummy"
         };
         var combined = Arrays.copyOf(base, base.length + recording.length);
         System.arraycopy(recording, 0, combined, base.length, recording.length);

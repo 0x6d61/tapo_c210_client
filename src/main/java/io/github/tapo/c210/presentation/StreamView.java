@@ -147,7 +147,7 @@ public final class StreamView {
 
     public void showRecordingAvailable() {
         if (!recording) {
-            recordingStatus.setText("ローカル録画: 利用可能（開始時に保存先を選択）");
+            recordingStatus.setText("ローカル録画: 利用可能（映像のみ・開始時に保存先を選択）");
         }
     }
 
@@ -155,7 +155,7 @@ public final class StreamView {
         Objects.requireNonNull(output, "output must not be null");
         recording = true;
         recordingButton.setText("録画停止");
-        recordingStatus.setText("録画中: " + output.getFileName());
+        recordingStatus.setText("録画中（映像のみ）: " + output.getFileName());
     }
 
     public void showRecordingStopped() {
