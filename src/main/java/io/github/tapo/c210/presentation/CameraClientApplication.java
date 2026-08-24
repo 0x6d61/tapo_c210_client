@@ -8,6 +8,7 @@ import io.github.tapo.c210.application.ConnectWithProfile;
 import io.github.tapo.c210.application.DiscoverCameras;
 import io.github.tapo.c210.application.ConnectedCamera;
 import io.github.tapo.c210.application.ListSavedProfiles;
+import io.github.tapo.c210.application.LibVlcUnavailableException;
 import io.github.tapo.c210.application.MoveCamera;
 import io.github.tapo.c210.application.RecordingSession;
 import io.github.tapo.c210.application.StartRecording;
@@ -194,6 +195,11 @@ public final class CameraClientApplication extends Application {
                     view,
                     profileDevice(profile),
                     new CameraCredentials(profile.username(), password));
+        } catch (LibVlcUnavailableException exception) {
+            cancelCapabilities();
+            closeActiveSession();
+            showLibVlcUnavailable();
+            showConnectionSelection(loadProfiles());
         } catch (Exception exception) {
             cancelCapabilities();
             closeActiveSession();
@@ -227,6 +233,11 @@ public final class CameraClientApplication extends Application {
                     view,
                     discoveredDevice.orElseGet(() -> manualDevice(form)),
                     new CameraCredentials(form.username(), form.password()));
+        } catch (LibVlcUnavailableException exception) {
+            cancelCapabilities();
+            closeActiveSession();
+            showLibVlcUnavailable();
+            showConnectionSelection(loadProfiles());
         } catch (CameraConnectionException exception) {
             cancelCapabilities();
             showInfo("接続失敗", "RTSPストリームを開始できませんでした。接続先とカメラアカウントを確認してください。");
@@ -471,5 +482,13 @@ public final class CameraClientApplication extends Application {
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+
+    private void showLibVlcUnavailable() {
+        showInfo(
+                "VLCが必要です",
+                "RTSP映像の再生に必要な64-bit版VLC/libVLCが見つからないか、読み込めません。"
+                        + "\nVLCをインストールしてからアプリを再起動してください。"
+                        + "\nhttps://www.videolan.org/vlc/");
     }
 }
