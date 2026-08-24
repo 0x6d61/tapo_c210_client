@@ -33,14 +33,15 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
     @Override
     public ConnectedCamera connect(RtspConnectionRequest request)
             throws CameraConnectionException {
-        return connect(request, player -> { });
+        return connect(request, player -> { }, null);
     }
 
     /** Opens a stream and attaches its decoded video frames to a JavaFX image view. */
     public ConnectedCamera connect(RtspConnectionRequest request, ImageView imageView)
             throws CameraConnectionException {
         Objects.requireNonNull(imageView, "imageView must not be null");
-        return connect(request, player -> new ImageViewVideoSurface(imageView).attach(player));
+        var videoSurface = new ImageViewVideoSurface(imageView);
+        return connect(request, videoSurface::attach, videoSurface);
     }
 
     /** Starts a second VLCJ player that records the existing RTSP session to an MP4 file. */
@@ -77,7 +78,9 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
     }
 
     private ConnectedCamera connect(
-            RtspConnectionRequest request, Consumer<MediaPlayer> videoSurfaceAttacher)
+            RtspConnectionRequest request,
+            Consumer<MediaPlayer> videoSurfaceAttacher,
+            ImageViewVideoSurface videoSurface)
             throws CameraConnectionException {
         Objects.requireNonNull(request, "request must not be null");
         Objects.requireNonNull(videoSurfaceAttacher, "videoSurfaceAttacher must not be null");
@@ -94,7 +97,7 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
                 player.release();
                 throw new CameraConnectionException("LibVLC rejected the RTSP stream");
             }
-            return new VlcjRtspSession(player, options);
+            return new VlcjRtspSession(player, options, videoSurface);
         } catch (CameraConnectionException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -116,11 +119,17 @@ public final class VlcjRtspConnector implements RtspConnector, AutoCloseable {
     private static final class VlcjRtspSession implements ConnectedCamera {
         private final MediaPlayer player;
         private final VlcjRtspOptions options;
+        @SuppressWarnings("unused")
+        private final ImageViewVideoSurface videoSurface;
         private boolean closed;
 
-        private VlcjRtspSession(MediaPlayer player, VlcjRtspOptions options) {
+        private VlcjRtspSession(
+                MediaPlayer player,
+                VlcjRtspOptions options,
+                ImageViewVideoSurface videoSurface) {
             this.player = player;
             this.options = options;
+            this.videoSurface = videoSurface;
         }
 
         @Override

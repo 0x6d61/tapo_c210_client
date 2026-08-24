@@ -133,7 +133,7 @@ public final class CameraClientApplication extends Application {
             @Override
             protected List<CameraDevice> call() throws Exception {
                 return new DiscoverCameras(new WsDiscoveryClient()).execute(
-                        Duration.ofSeconds(4), this::isCancelled);
+                        Duration.ofSeconds(15), this::isCancelled);
             }
         };
         discoveryTask = task;

@@ -59,6 +59,26 @@ class ProbeMatchParserTest {
     }
 
     @Test
+    void acceptsTheLegacyNamespacesUsedByTapoC210() throws Exception {
+        var devices = parser.parse("""
+                <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+                    xmlns:wsdd="http://schemas.xmlsoap.org/ws/2005/04/discovery">
+                  <SOAP-ENV:Body><wsdd:ProbeMatches><wsdd:ProbeMatch>
+                    <wsa:EndpointReference><wsa:Address>uuid:c210</wsa:Address></wsa:EndpointReference>
+                    <wsdd:Scopes>onvif://www.onvif.org/name/C210 onvif://www.onvif.org/hardware/C210</wsdd:Scopes>
+                    <wsdd:XAddrs>http://192.168.11.15:2020/onvif/device_service</wsdd:XAddrs>
+                  </wsdd:ProbeMatch></wsdd:ProbeMatches></SOAP-ENV:Body>
+                </SOAP-ENV:Envelope>
+                """);
+
+        assertEquals(1, devices.size());
+        assertEquals("uuid:c210", devices.getFirst().deviceId());
+        assertEquals("192.168.11.15", devices.getFirst().host());
+        assertEquals("C210", devices.getFirst().model());
+    }
+
+    @Test
     void rejectsXmlWithDoctypeDeclarations() {
         var xml = """
                 <?xml version="1.0"?>

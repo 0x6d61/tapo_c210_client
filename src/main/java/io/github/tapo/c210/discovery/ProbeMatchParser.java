@@ -20,8 +20,14 @@ import org.xml.sax.SAXParseException;
 
 /** Parses and de-duplicates ONVIF WS-Discovery ProbeMatch responses. */
 public final class ProbeMatchParser {
-    private static final String ADDRESSING_NS = "http://www.w3.org/2005/08/addressing";
-    private static final String DISCOVERY_NS = "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01";
+    private static final String[] ADDRESSING_NAMESPACES = {
+        "http://www.w3.org/2005/08/addressing",
+        "http://schemas.xmlsoap.org/ws/2004/08/addressing"
+    };
+    private static final String[] DISCOVERY_NAMESPACES = {
+        "http://docs.oasis-open.org/ws-dd/ns/discovery/2009/01",
+        "http://schemas.xmlsoap.org/ws/2005/04/discovery"
+    };
 
     public List<CameraDevice> parse(String xml) throws DiscoveryParseException {
         try {
@@ -29,34 +35,37 @@ public final class ProbeMatchParser {
             builder.setErrorHandler(new ThrowingErrorHandler());
             var document = builder.parse(new InputSource(new StringReader(xml)));
             var devices = new LinkedHashMap<String, CameraDevice>();
-            var matches = document.getElementsByTagNameNS(DISCOVERY_NS, "ProbeMatch");
-            for (var index = 0; index < matches.getLength(); index++) {
-                var match = (Element) matches.item(index);
-                var deviceId = text(match, ADDRESSING_NS, "Address");
-                var serviceUrl = firstServiceUrl(text(match, DISCOVERY_NS, "XAddrs"));
-                if (deviceId == null || serviceUrl == null || devices.containsKey(deviceId)) {
-                    continue;
-                }
-                var scopes = split(text(match, DISCOVERY_NS, "Scopes"));
-                var host = serviceUrl.getHost();
-                if (host == null || host.isBlank()) {
-                    continue;
-                }
-                var onvifPort = serviceUrl.getPort() > 0
-                        ? serviceUrl.getPort()
-                        : ("https".equalsIgnoreCase(serviceUrl.getScheme()) ? 443 : 80);
-                try {
-                    devices.put(deviceId, new CameraDevice(
-                            deviceId,
-                            host,
-                            onvifPort,
-                            554,
-                            serviceUrl,
-                            scopeValue(scopes, "/manufacturer/"),
-                            scopeValue(scopes, "/name/"),
-                            scopeValue(scopes, "/hardware/")));
-                } catch (IllegalArgumentException ignored) {
-                    // A malformed response must not prevent valid cameras from being listed.
+            for (var discoveryNamespace : DISCOVERY_NAMESPACES) {
+                var matches = document.getElementsByTagNameNS(discoveryNamespace, "ProbeMatch");
+                for (var index = 0; index < matches.getLength(); index++) {
+                    var match = (Element) matches.item(index);
+                    var deviceId = text(match, ADDRESSING_NAMESPACES, "Address");
+                    var serviceUrl = firstServiceUrl(
+                            text(match, DISCOVERY_NAMESPACES, "XAddrs"));
+                    if (deviceId == null || serviceUrl == null || devices.containsKey(deviceId)) {
+                        continue;
+                    }
+                    var scopes = split(text(match, DISCOVERY_NAMESPACES, "Scopes"));
+                    var host = serviceUrl.getHost();
+                    if (host == null || host.isBlank()) {
+                        continue;
+                    }
+                    var onvifPort = serviceUrl.getPort() > 0
+                            ? serviceUrl.getPort()
+                            : ("https".equalsIgnoreCase(serviceUrl.getScheme()) ? 443 : 80);
+                    try {
+                        devices.put(deviceId, new CameraDevice(
+                                deviceId,
+                                host,
+                                onvifPort,
+                                554,
+                                serviceUrl,
+                                scopeValue(scopes, "/manufacturer/"),
+                                scopeValue(scopes, "/name/"),
+                                scopeValue(scopes, "/hardware/")));
+                    } catch (IllegalArgumentException ignored) {
+                        // A malformed response must not prevent valid cameras from being listed.
+                    }
                 }
             }
             return List.copyOf(devices.values());
@@ -80,13 +89,15 @@ public final class ProbeMatchParser {
         return factory;
     }
 
-    private static String text(Element parent, String namespace, String localName) {
-        var nodes = parent.getElementsByTagNameNS(namespace, localName);
-        if (nodes.getLength() == 0) {
-            return null;
+    private static String text(Element parent, String[] namespaces, String localName) {
+        for (var namespace : namespaces) {
+            var nodes = parent.getElementsByTagNameNS(namespace, localName);
+            if (nodes.getLength() > 0) {
+                var value = nodes.item(0).getTextContent();
+                return value == null || value.isBlank() ? null : value.trim();
+            }
         }
-        var value = nodes.item(0).getTextContent();
-        return value == null || value.isBlank() ? null : value.trim();
+        return null;
     }
 
     private static URI firstServiceUrl(String xAddrs) {
