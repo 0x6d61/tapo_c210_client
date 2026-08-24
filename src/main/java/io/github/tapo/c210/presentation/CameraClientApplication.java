@@ -3,6 +3,8 @@ package io.github.tapo.c210.presentation;
 import io.github.tapo.c210.application.CameraConnectionException;
 import io.github.tapo.c210.application.CameraControlException;
 import io.github.tapo.c210.application.CameraCredentials;
+import io.github.tapo.c210.application.ConnectionFormInput;
+import io.github.tapo.c210.application.ConnectionFormValidator;
 import io.github.tapo.c210.application.ConnectWithCredentials;
 import io.github.tapo.c210.application.ConnectWithProfile;
 import io.github.tapo.c210.application.DiscoverCameras;
@@ -15,7 +17,7 @@ import io.github.tapo.c210.application.StartRecording;
 import io.github.tapo.c210.application.StopCameraMovement;
 import io.github.tapo.c210.application.StopRecording;
 import io.github.tapo.c210.application.SwitchStreamQuality;
-import io.github.tapo.c210.application.UpdateCameraCredentials;
+import io.github.tapo.c210.application.UpdateSavedCameraProfile;
 import io.github.tapo.c210.application.ValidatedConnectionForm;
 import io.github.tapo.c210.application.port.MotionEventSubscription;
 import io.github.tapo.c210.application.port.RtspConnector;
@@ -109,21 +111,34 @@ public final class CameraClientApplication extends Application {
         var view = new CameraProfileEditView(
                 profile,
                 () -> showConnectionSelection(loadProfiles()),
-                (username, password) -> updateProfileCredentials(profile, username, password));
-        stage.setScene(new Scene(view.root(), 620, 360));
+                input -> updateProfile(profile, input));
+        stage.setScene(new Scene(view.root(), 620, 480));
     }
 
-    private void updateProfileCredentials(
-            CameraProfile profile, String username, String password) {
+    private void updateProfile(CameraProfile profile, ConnectionFormInput input) {
         try {
-            new UpdateCameraCredentials(
+            var password = input.password();
+            if (password.isBlank()) {
+                password = new SqliteSecretStore(database).load(profile.id()).orElse("");
+            }
+            var validation = new ConnectionFormValidator().validate(new ConnectionFormInput(
+                    input.host(),
+                    input.onvifPort(),
+                    input.rtspPort(),
+                    input.username(),
+                    password,
+                    input.streamQuality(),
+                    true));
+            if (validation.value().isEmpty()) {
+                showInfo("接続先編集", String.join("\n", validation.errors()));
+                showProfileEdit(profile);
+                return;
+            }
+            new UpdateSavedCameraProfile(
                     new SqliteProfileRepository(database),
                     new SqliteSecretStore(database))
-                    .execute(profile, username, password);
+                    .execute(profile, validation.value().orElseThrow());
             showConnectionSelection(loadProfiles());
-        } catch (IllegalArgumentException exception) {
-            showInfo("接続先編集", "ユーザー名を確認してください。");
-            showProfileEdit(profile);
         } catch (Exception exception) {
             showInfo("接続先編集", "接続先情報を保存できませんでした。");
             showProfileEdit(profile);
