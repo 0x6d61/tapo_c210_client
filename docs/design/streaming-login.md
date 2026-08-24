@@ -1,43 +1,64 @@
-# ログインからRTSPストリーミング開始までの設計
+# C210クライアントの画面・通信設計
 
 ステータス: Draft
 
-## 1. 目的とスコープ
+## 1. 目的と初期スコープ
 
-IPアドレス、カメラアカウントのユーザー名・パスワードを入力すると、TapoカメラのRTSP映像を表示するデスクトップクライアントを作る。
+Tapo C210を同一LAN上から操作するJavaFXデスクトップクライアントを作る。起動後に保存済みカメラを選択するか、カメラを自動検出して接続先を選び、カメラアカウントのユーザー名・パスワードで接続する。
 
-今回の初期スコープは次のとおり。
+初期スコープは次のとおり。
 
-- 複数のカメラ接続先を保存し、次回起動時に選択できる。
-- 新規接続では、IPアドレス、ユーザー名、パスワードを入力する。
-- 保存済み接続を選択すると、保存した接続先情報と資格情報を使って接続する。
-- RTSPの高画質ストリーム（`stream1`）と低画質ストリーム（`stream2`）を選択できる。
-- 接続中、再生中、切断、接続失敗を画面上で明確に表現する。
+- ONVIF WS-Discoveryによる同一LAN上のカメラ自動検出
+- IPアドレス、ユーザー名、パスワードによる手動接続
+- 接続先プロファイルの保存と、次回起動時の選択
+- プロファイル表示名の自動生成（ユーザー入力は受け付けない）
+- JavaFXによるライブ映像表示
+- RTSP高画質ストリーム（`stream1`）の初期再生
+- RTSP低画質ストリーム（`stream2`）への切り替え
+- パン・チルト（PTZ）操作
+- ライブ映像のローカル録画の開始・停止
+- 動体検知イベントの受信と画面通知
+- 双方向音声通話のためのUIと通信Port
+- 接続中、再生中、録画中、切断、接続失敗を画面上で明確に表現する
 
-初期スコープには含めないもの。
+録画はまず「現在のライブ映像をクライアントPCへ保存するローカル録画」を確実な対象とする。カメラ内microSDの録画一覧・再生・削除は、C210が第三者プロトコル経由で公開する機能を確認したうえで、同じ初期スコープの任意機能として実装する。
 
-- Tapoクラウドへのログイン、カメラの初期設定
-- PTZ、録画、音声通話、動体検知などのカメラ操作
-- カメラの自動検出、WAN越しの接続、ルーター設定
+## 2. 前提と重要な判断
 
-## 2. 前提と判断
+### 2.1 UIとライブラリ
 
-### 2.1 UI
+UIはJavaFXを正式採用する。JavaFXの画面・コントローラーはPresentation層に閉じ込め、通信・録画・カメラ制御のコードからJavaFX型を参照しない。
 
-画面遷移が必要なデスクトップアプリを想定し、UI層はJavaFXを第一候補とする。ただし、アプリケーション層・ドメイン層はJavaFXに依存させない。UIフレームワークの最終決定とMaven依存関係の追加は、画面の最小プロトタイプで確認してから行う。
+RTSPのパケット処理やデコードは自前実装せず、RTSP対応ライブラリを使用する。最初のPOCではVLCJ/libVLCを第一候補とし、ネイティブランタイムの配布やJavaFX映像領域への埋め込みに問題があれば、FFmpeg系ライブラリへ差し替えられるよう `StreamPlayer` と `RecordingEngine` のAdapterで隔離する。Maven依存関係とネイティブランタイムの配布方法は、POCで確認してから確定する。
 
-### 2.2 RTSP
+### 2.2 C210のプロトコル分担
 
-TP-Linkの公式ガイドでは、TapoのRTSP接続先として次の形式が案内されている。
+通信方式を機能ごとに分ける。
+
+| 機能 | 第一候補 | 初期方針 |
+| --- | --- | --- |
+| カメラ検出 | ONVIF WS-Discovery | 同一LANのマルチキャストで検出する |
+| ライブ映像 | RTSP | `stream1` を初期値、`stream2`へ切り替え可能 |
+| PTZ | ONVIF Profile S | ONVIFのPTZ能力を確認して操作する |
+| 動体検知 | ONVIFイベント | 対応するイベントを購読し、未対応なら機能を無効表示する |
+| ローカル録画 | RTSP再生ライブラリまたは録画ライブラリ | ライブ映像をPCへ保存する |
+| 双方向音声 | ONVIF以外のC210固有・追加プロトコル | `TalkbackPort` を先に定義し、実機検証後にAdapterを選ぶ |
+| microSD録画の操作 | ONVIF追加ProfileまたはC210固有プロトコル | 能力検出できた場合だけ有効化する |
+
+TP-Link公式FAQでは、TapoはONVIF Profile S、ONVIFポート2020、RTSPポート554を使用し、Profile Sは映像・音声ストリーミング、イベント処理、PTZなどの基本機能を扱うと説明されている。一方、第三者プラットフォームからの双方向通話はProfile Sに含まれないため、RTSP/ONVIFだけで実現できる前提にはしない。
+
+### 2.3 RTSP接続
+
+公式に案内されているRTSP接続先は次の形式とする。
 
 ```text
 rtsp://<IPアドレス>:554/stream1  # 高画質
 rtsp://<IPアドレス>:554/stream2  # 低画質
 ```
 
-RTSPに使うユーザー名・パスワードは、Tapoアプリで作成する「カメラのアカウント」であり、TP-Link ID/Tapoアプリのログイン情報とは別物として扱う。C210については公式FAQの対象製品一覧に含まれているが、実際の接続可否や挙動はハードウェアバージョン・ファームウェア・設定に依存し得るため、初期実装の完了条件にC210実機での接続確認を含める。RTSP対応、ポート、パス、ファームウェア差異をコードに直書きせず、接続設定とアダプターで吸収する。
+初期値は高画質の `stream1` とする。RTSPに使うユーザー名・パスワードは、Tapoアプリで作成するカメラアカウントであり、TP-Link ID/Tapoアプリのログイン情報とは別物として扱う。
 
-アプリケーション層では、資格情報をRTSP URIに埋め込まず、次のように接続要求を分離する。
+アプリケーション層では、資格情報をRTSP URIに埋め込まず、接続要求を分離する。
 
 ```text
 RtspConnectionRequest
@@ -45,83 +66,137 @@ RtspConnectionRequest
   credentials: CameraCredentials(username, password)
 ```
 
-再生ライブラリがURI形式を要求する場合だけ、最も外側のアダプターで一時的にURIを組み立てる。ログ、例外、画面表示にはパスワードを出さない。
+再生ライブラリがURI形式を要求する場合だけ、最も外側のAdapterで一時的にURIを組み立てる。ログ、例外、画面表示にはパスワードを出さない。
 
-### 2.3 保存済みアカウント
+### 2.4 自動検出
 
-「前回入力したアカウントを選択する」ため、メタデータと秘密情報を分けて保存する。
+ONVIF WS-DiscoveryのProbeを同一LANへ送信し、ProbeMatchの応答からカメラ候補を作る。ONVIF Profile Sの標準的な検出経路を使い、対象ネットワークはローカルサブネットに限定する。
 
-- メタデータ: プロファイルID、表示名、IPアドレス、ポート、ユーザー名、画質、最終利用日時
+- 検出はユーザーが「カメラを検索」を押したときに明示的に開始する。
+- マルチキャスト送信先は `239.255.255.250:3702` とする。
+- 検出タイムアウトを設定し、応答がない場合も画面を固めない。
+- VLAN、AP分離、Windowsファイアウォールなどで検出できない場合は、IP手入力へ切り替えられるようにする。
+- 検出結果にはIPアドレス、ONVIFサービスURL、メーカー、モデル、ハードウェア情報を表示する。
+- 検出だけでは資格情報を確定しない。候補選択後にカメラアカウントを入力して接続する。
+
+### 2.5 保存済みプロファイルと表示名
+
+前回入力したアカウントを選択できるよう、メタデータと秘密情報を分けて保存する。
+
+- メタデータ: プロファイルID、表示名、IPアドレス、ポート、ユーザー名、画質、最終利用日時、検出したモデル
 - 秘密情報: プロファイルIDに紐づくパスワード
-- パスワード保存先: OSの資格情報ストアを使う `SecretStore` ポート
+- パスワード保存先: OSの資格情報ストアを使う `SecretStore` Port
 - OSの資格情報ストアが使えない場合: パスワードを平文保存せず、次回接続時に再入力を求める
 - 保存は「この接続を記憶する」の明示的な選択時だけ行う
 - プロファイル削除時はメタデータと秘密情報を同時に削除する
 
-メタデータファイルにパスワードを入れない。保存されたプロファイルの一覧には、パスワードを表示せず、必要な場合だけSecretStoreから再取得する。
+表示名はユーザー入力ではなく、次の規則で自動生成する。
+
+1. 検出情報にモデル名があれば `Tapo C210 (192.168.1.20)` の形式にする。
+2. モデル名が取得できなければ `Camera (192.168.1.20)` の形式にする。
+3. 同じ表示名が存在する場合は末尾に ` #2`、` #3` のような連番を付ける。
+4. IPアドレスが変わっても同じカメラとして扱える識別情報が取得できる場合は、表示名を再生成して更新する。
+
+メタデータファイルにパスワードを入れない。保存されたプロファイルの一覧にはパスワードを表示せず、必要な場合だけSecretStoreから再取得する。
 
 ## 3. 画面遷移
 
 ```mermaid
 stateDiagram-v2
     [*] --> AccountSelection
-    AccountSelection --> ConnectionForm: 新規接続
+    AccountSelection --> DeviceDiscovery: カメラを検索
+    AccountSelection --> ConnectionForm: 手動接続／編集
     AccountSelection --> Connecting: 保存済み接続を選択
+    DeviceDiscovery --> ConnectionForm: 検出結果を選択
+    DeviceDiscovery --> AccountSelection: キャンセル／検出終了
     ConnectionForm --> Connecting: 接続する
     Connecting --> StreamView: RTSP再生開始
-    Connecting --> ConnectionForm: 入力エラー
     Connecting --> ConnectionError: 接続失敗
     ConnectionError --> ConnectionForm: 入力を修正
     ConnectionError --> AccountSelection: 保存済み一覧へ
+    StreamView --> PtzControl: PTZ操作
+    StreamView --> Recording: 録画開始
+    StreamView --> Talkback: 通話開始
+    StreamView --> MotionAlert: 動体検知イベント
+    PtzControl --> StreamView: 操作終了
+    Recording --> StreamView: 録画停止
+    Talkback --> StreamView: 通話停止
+    MotionAlert --> StreamView: 通知確認
     StreamView --> Connecting: 再接続
     StreamView --> AccountSelection: 切断
 ```
 
 ### 3.1 接続先選択画面
 
-起動時の画面。保存済みプロファイルを一覧表示し、「新しい接続」と「削除」を提供する。
+起動時の画面。保存済みプロファイルを一覧表示し、「カメラを検索」「手動接続」「削除」を提供する。
 
 表示項目:
 
-- 表示名（未設定の場合は `ユーザー名@IPアドレス` を仮表示）
+- 自動生成された表示名
 - IPアドレス
 - ユーザー名
-- 使用するストリーム（高画質／低画質）
+- 使用するストリーム（初期値は高画質）
 - 最終利用日時
+- 前回取得した能力（PTZ、録画、動体検知、通話）の簡易表示
 
-保存済みプロファイルを選択して接続する場合、保存済みパスワードが取得できなければ接続フォームへ遷移して再入力を求める。パスワードを画面に復元表示しない。
+### 3.2 カメラ検出画面
 
-### 3.2 接続フォーム画面
+検出中はスピナー、残り時間、キャンセルを表示する。検出結果を選択すると、IPアドレスとモデル情報を接続フォームへ引き継ぐ。検出結果が0件でも「IPアドレスを入力して接続」へ進める。
+
+### 3.3 接続フォーム画面
 
 入力項目:
 
 - IPアドレス: 初期実装はIPv4を必須とする。将来IPv6を追加できるモデルにする
-- ポート: 初期値 `554`、変更可能
+- ONVIFポート: 初期値 `2020`、変更可能
+- RTSPポート: 初期値 `554`、変更可能
 - ユーザー名
 - パスワード
-- ストリーム: 高画質（`stream1`）／低画質（`stream2`）
+- ストリーム: 高画質（`stream1`）を初期選択、低画質（`stream2`）へ変更可能
 - 「この接続を記憶する」チェックボックス（初期値オフ）
 
 「接続する」を押す前に、IPアドレス、ポート、ユーザー名、パスワードの空欄と形式をローカル検証する。入力エラーではネットワークへ接続しない。
 
-### 3.3 接続中画面
+### 3.4 接続中画面
 
 接続処理中は二重接続を防止し、進捗表示とキャンセル操作を提供する。処理には接続タイムアウトを設定し、無期限に画面をブロックしない。
 
-### 3.4 ストリーム画面
+接続時には次の順で能力を取得する。
 
-RTSP再生領域、接続先の表示、現在のストリーム品質、切断、再接続を提供する。パスワードやRTSP URI全体は表示しない。
+1. RTSPセッションを開き、映像を再生する。
+2. ONVIFサービスへ接続し、PTZ、イベント、音声、録画の能力を取得する。
+3. 能力に応じてストリーム画面の操作ボタンを有効化する。
 
-### 3.5 エラー表示
+映像再生が成功してもONVIF能力取得に失敗する場合は、映像を表示したまま、利用できない操作だけを無効化する。
+
+### 3.5 ストリーム画面
+
+RTSP再生領域に加え、次の操作領域を持つ。
+
+- 高画質／低画質切り替え
+- PTZパッド、停止、ホーム、対応していればプリセット
+- 録画開始／停止と録画状態
+- マイク入力のミュート、スピーカー出力のミュート
+- 通話開始／停止（能力未確認時は無効）
+- 動体検知の有効状態と最新イベント
+- 再接続、切断
+
+パスワードやRTSP URI全体は表示しない。
+
+### 3.6 エラー表示
 
 利用者向けメッセージと、ログに残す診断用コードを分ける。
 
 | 内部分類 | 画面メッセージ例 | 次の操作 |
 | --- | --- | --- |
 | 入力不正 | IPアドレスまたはポートを確認してください | 入力フォームへ戻る |
+| 検出不可 | カメラを自動検出できません。IPアドレスを入力してください | 手動接続 |
 | 到達不能／タイムアウト | カメラに接続できません | 入力修正、再試行 |
 | 認証失敗 | カメラアカウントを確認してください | パスワード再入力 |
 | RTSP非対応／パス不正 | RTSPストリームを開始できません | stream1/stream2変更、設定確認 |
+| ONVIF能力取得失敗 | 映像は表示できますが、一部の操作は利用できません | 再接続、手動設定 |
+| 機能非対応 | このカメラではこの機能を利用できません | 他の操作を継続 |
+| 録画保存失敗 | 録画ファイルを保存できません | 保存先変更、再試行 |
 | デコード失敗 | 映像を再生できません | 再接続、対応形式の調査 |
 
 認証失敗でも、画面やログに入力されたパスワードを出さない。
@@ -133,39 +208,62 @@ JavaFX UI
   └─ Application services / use cases
        ├─ CameraProfileRepository
        ├─ SecretStore
-       ├─ RtspSessionFactory
-       └─ StreamPlayer
-            └─ RTSP再生ライブラリのadapter
+       ├─ CameraDiscovery
+       ├─ CameraCapabilityService
+       ├─ RtspSessionFactory ── RTSP library adapter
+       ├─ StreamPlayer       ── RTSP library adapter
+       ├─ RecordingEngine     ── recording library adapter
+       ├─ PtzController       ── ONVIF adapter
+       ├─ MotionEventSource   ── ONVIF adapter
+       └─ TalkbackService     ── C210-specific adapter
 ```
 
 ### 4.1 Presentation層
 
-JavaFXの画面、画面状態、入力値の変換を担当する。RTSP URIの組み立て、ファイル保存、再生ライブラリの呼び出しは行わない。
+JavaFXの画面、画面状態、入力値の変換、ボタンの有効／無効表示を担当する。WS-Discovery、RTSP URIの組み立て、ファイル保存、再生ライブラリ、ONVIF SOAPの呼び出しは行わない。
 
 ### 4.2 Application層
 
 次のユースケースを持つ。
 
 - `ListSavedProfiles`: 保存済みプロファイルの一覧取得
+- `DiscoverCameras`: ONVIF WS-Discoveryでカメラ候補を取得
 - `ConnectWithProfile`: プロファイルを選択し、SecretStoreから資格情報を取得して接続
 - `ConnectWithCredentials`: フォーム入力を検証し、接続して必要なら保存
-- `DisconnectCamera`: セッション停止と再生停止
+- `LoadCapabilities`: ONVIFとRTSPから利用可能な機能を取得
+- `MoveCamera`: PTZの相対移動、停止、ホーム、プリセット操作
+- `StartRecording` / `StopRecording`: ライブ映像のローカル録画
+- `StartTalkback` / `StopTalkback`: 双方向音声通話の開始・停止
+- `SubscribeMotionEvents`: 動体検知イベントの購読と画面通知
+- `DisconnectCamera`: セッション、イベント購読、録画、通話、再生の停止
 - `ReconnectCamera`: 同じ設定で再接続
 
-接続処理はUIスレッドをブロックせず、キャンセル可能な非同期処理とする。UIは状態を `Idle`、`Connecting`、`Playing`、`Failed`、`Disconnecting` として表示する。
+接続処理とイベント購読はUIスレッドをブロックせず、キャンセル可能な非同期処理とする。UIは状態を `Idle`、`Discovering`、`Connecting`、`Playing`、`Recording`、`Talking`、`Failed`、`Disconnecting` として表示する。
 
 ### 4.3 Domain層
 
 候補モデル:
 
 ```text
-CameraProfile
-  profileId
+CameraDevice
+  deviceId
   displayName
   host
-  port
+  onvifPort
+  rtspPort
+  manufacturer
+  model
+  hardwareVersion
+
+CameraProfile
+  profileId
+  displayName             # 検出情報／hostから自動生成
+  deviceId                # 取得できない場合はhost等から安定生成
+  host
+  onvifPort
+  rtspPort
   username
-  streamQuality
+  streamQuality           # 初期値 HIGH
   lastUsedAt
 
 CameraCredentials
@@ -177,16 +275,30 @@ RtspEndpoint
   port
   streamPath
 
-StreamQuality
-  HIGH -> /stream1
-  LOW  -> /stream2
+CameraCapabilities
+  ptz
+  localRecording
+  cameraStorageRecording
+  motionEvents
+  talkback
+
+PtzCommand
+  direction / speed / duration / preset
+
+MotionEvent
+  occurredAt
+  type
+  source
 ```
 
-`CameraProfile` はパスワードを持たない。`CameraCredentials` はメモリ上でのみ扱い、接続終了後に保持し続けない設計にする。
+`CameraProfile` はパスワードを持たない。`CameraCredentials` はメモリ上でのみ扱い、接続終了後に保持し続けない設計にする。機能の有無は `CameraCapabilities` で表現し、対応しない操作をUIから無理に実行しない。
 
 ### 4.4 PortとAdapter
 
 ```text
+CameraDiscovery
+  discover(timeout, cancellationToken)
+
 CameraProfileRepository
   save(profile)
   list()
@@ -208,9 +320,33 @@ StreamPlayer
   attach(session, videoSurface)
   play()
   stop()
+
+RecordingEngine
+  start(session, outputPath)
+  stop()
+
+PtzController
+  getCapabilities()
+  move(command)
+  stop()
+
+MotionEventSource
+  subscribe(listener)
+  close()
+
+TalkbackService
+  getCapabilities()
+  start(audioInput)
+  stop()
 ```
 
-再生エンジンはPortの外側に置く。候補はVLCJまたはFFmpeg系だが、ネイティブランタイムの配布、ライセンス、JavaFXの映像領域への埋め込みやすさを小さな実機／ローカル検証で比較してから決める。
+実装Adapterは次の構成を想定する。
+
+- `OnvifWsDiscoveryAdapter`: UDPマルチキャストによる自動検出
+- `OnvifDeviceAdapter`: Device、Media、PTZ、Eventサービス呼び出し
+- `RtspLibraryAdapter`: VLCJ/libVLCまたはFFmpeg系ライブラリによる再生
+- `RecordingLibraryAdapter`: ライブ映像のファイル保存
+- `C210TalkbackAdapter`: 実機でプロトコルを確認できた場合だけ有効化
 
 ## 5. データ保存
 
@@ -220,12 +356,15 @@ StreamPlayer
 
 ```json
 {
+  "version": 1,
   "profiles": [
     {
       "id": "generated-profile-id",
-      "displayName": "リビング",
+      "displayName": "Tapo C210 (192.168.1.20)",
+      "deviceId": "onvif-device-id",
       "host": "192.168.1.20",
-      "port": 554,
+      "onvifPort": 2020,
+      "rtspPort": 554,
       "username": "camera-user",
       "streamQuality": "HIGH",
       "lastUsedAt": "2026-08-24T12:00:00Z"
@@ -238,40 +377,52 @@ StreamPlayer
 
 ## 6. TDDでの実装順序
 
-1. `StreamQuality` と `RtspEndpoint` のテストを先に作り、`stream1`／`stream2` の変換とポート既定値を確定する。
-2. IPアドレス、ポート、ユーザー名、パスワードの入力バリデーターを実装する。
-3. `CameraProfileRepository` と `SecretStore` のPort、およびファイル／資格情報ストアのテストダブルを作る。
-4. `ConnectWithCredentials` と `ConnectWithProfile` のユースケースを、偽のセッションでテストする。
-5. 接続選択画面と接続フォーム画面を作り、画面状態のテストを追加する。
-6. 再生エンジンの候補を比較する最小のRTSP POCを作り、C210実機で `stream1`／`stream2` を確認する。
-7. 採用した再生エンジンをAdapterとして組み込み、接続タイムアウト、認証失敗、切断、再接続をテストする。
+1. `StreamQuality`、`RtspEndpoint`、`CameraProfileNameGenerator` のテストを先に作り、`stream1`／`stream2`、ポート既定値、自動表示名を確定する。
+2. IPアドレス、ONVIFポート、RTSPポート、ユーザー名、パスワードの入力バリデーターを実装する。
+3. `CameraDiscovery` のPortとWS-Discoveryメッセージのテストダブルを作り、複数応答、重複、タイムアウト、キャンセルをテストする。
+4. `CameraProfileRepository` と `SecretStore` のPort、およびファイル／資格情報ストアのテストダブルを作る。
+5. `ConnectWithCredentials`、`ConnectWithProfile`、`LoadCapabilities` のユースケースを偽のセッションとONVIF応答でテストする。
+6. 接続選択、検出結果、接続フォーム、接続中、ストリーム画面を作り、画面状態と操作ボタンの有効／無効をテストする。
+7. RTSPライブラリを使う最小POCを作り、C210実機で高画質 `stream1` を再生する。次に `stream2` を確認する。
+8. ONVIFのPTZ、イベント購読をAdapterとして組み込み、実機でパン・チルトと動体検知イベントを確認する。
+9. ライブ映像のローカル録画を組み込み、開始・停止、保存先、ディスク容量不足をテストする。
+10. 双方向音声とmicroSD録画操作の実機プロトコルを確認し、対応できる場合だけAdapterを追加する。未対応の場合も能力検出とUIの無効表示を完成させる。
 
 標準CIではカメラ実機を要求しない。実機確認は、接続先と資格情報を外部設定から与える明示的な統合テストとして分離する。
 
 ## 7. 受け入れシナリオ
 
-- 保存済みプロファイルがない状態で起動すると、接続フォームへ進める。
-- 正しいIPアドレス、ユーザー名、パスワードで接続すると、RTSP映像画面へ遷移する。
-- 「記憶する」を選んだ接続は、次回起動時に一覧から選択できる。
+- 保存済みプロファイルがない状態で起動すると、カメラ検索または手動接続へ進める。
+- 同一LAN上のC210を検索すると、IPアドレスとモデル情報を候補一覧に表示できる。
+- 検出できない場合でも、IPアドレスを手入力して接続できる。
+- 検出結果を選択すると、表示名が自動生成され、表示名入力欄は表示されない。
+- 正しいIPアドレス、ユーザー名、パスワードで接続すると、高画質RTSP映像画面へ遷移する。
 - 保存済み接続を選択すると、パスワードを再表示せずに接続できる。
 - 保存済みパスワードが取得できない場合は、再入力を求める。
+- PTZ能力がある場合、画面上の操作でカメラをパン・チルトできる。
+- 録画開始・停止でライブ映像をローカルファイルへ保存できる。
+- 動体検知イベントを受信した場合、画面に通知し、時刻と種別を表示できる。
+- 双方向通話が実機プロトコルで利用可能な場合、マイク入力を開始・停止できる。
+- 双方向通話が利用できない場合、理由を表示してボタンを無効化できる。
 - 誤った認証情報では、秘密情報を漏らさずに認証エラーを表示できる。
 - 接続タイムアウト時にUIが固まらず、再試行または入力修正へ進める。
-- stream1で失敗した場合、stream2を選択して再試行できる。
 - プロファイル削除後、メタデータと保存済みパスワードの両方が削除される。
 
 ## 8. 未決定事項
 
 - 対応OSをWindows限定にするか、macOS/Linuxも対象にするか
-- JavaFXを正式採用するか
-- RTSP再生エンジン（VLCJ、FFmpeg系など）
+- RTSP再生・録画ライブラリの最終選定（VLCJ/libVLCを第一候補）
+- JavaFX映像領域へのネイティブ映像埋め込み方式
 - OS資格情報ストアの実装方式と、対応できないOSでの挙動
-- C210のハードウェアバージョン、ファームウェア、RTSP用カメラアカウントの準備状況
-- 初期ストリームを高画質にするか低画質にするか
-- 接続先プロファイルの表示名をユーザー入力にするか自動生成だけにするか
+- C210のハードウェアバージョン、ファームウェア、RTSP/ONVIF用カメラアカウントの準備状況
+- 双方向音声を実現するC210固有プロトコルの有無と実装可否
+- microSD録画をカメラ側で操作・再生するために利用できるプロトコルの範囲
+- 自動検出時に表示するモデル情報を取得できない機種へのフォールバック
 
 ## 9. 参考資料
 
+- [Tapo C210 製品仕様（TP-Link日本）](https://www.tp-link.com/jp/smart-home/tapo/tapo-c210/)
 - [Tapoを使用したRTSPライブストリーミングの利用方法（TP-Link日本）](https://www.tp-link.com/jp/support/faq/2680/)
 - [TapoカメラとRTSP/ONVIFに関するよくある質問（TP-Link日本）](https://www.tp-link.com/jp/support/faq/4465/)
-- [How to View Tapo Camera on PC, NAS, or NVR Using RTSP/ONVIF（Tapo公式）](https://www.tapo.com/en/faq/34/)
+- [Profile S（ONVIF）](https://www.onvif.org/profiles/profile-s/)
+- [ONVIF Profile S Specification](https://www.onvif.org/wp-content/uploads/2019/12/ONVIF_Profile_-S_Specification_v1-3.pdf)
