@@ -359,7 +359,7 @@ Presentation層へ渡し、後者は選択されたプロファイルのパス�
 `RtspConnectionRequest`を`RtspConnector`へ渡す。`ConnectWithCredentials`は接続成功後、保存が明示された場合だけ自動表示名と資格情報を
 SQLiteへ保存する。保存に失敗しても接続済みセッションは維持し、画面へ警告を返す。RTSPライブラリはこのPortの外側へ隔離する。
 
-JavaFXの初期画面として、保存済みプロファイルの選択画面と手動接続フォームを実装済みである。フォームはIPv4、ONVIFポート、
+JavaFXの初期画面として、保存済みプロファイルの選択画面、手動接続フォーム、VLCJの`ImageViewVideoSurface`を使うライブ映像画面を実装済みである。フォームはIPv4、ONVIFポート、
 RTSPポート、ユーザー名、パスワード、ストリーム画質をネットワーク接続前に検証し、保存済みプロファイルはOSごとのアプリケー
 ションデータディレクトリにあるSQLiteから読み込む。RTSP接続AdapterとWS-Discoveryは次の実装単位である。
 
@@ -368,8 +368,8 @@ WS-DiscoveryのPortとAdapterも実装済みである。`WsDiscoveryClient`はSO
 EndpointReference、XAddrs、Scopesからカメラ候補を生成する。応答の重複はdevice IDで除去し、不正な単一応答は他の応答を妨げない。
 JavaFXの「カメラを検索」からは`Task`で非同期実行し、検索中のスピナー、キャンセル、検出結果一覧を表示する。候補を選ぶと
 IPアドレス、ONVIFポート、RTSPポートを接続フォームへ引き継ぐ。VLCJのRTSP Adapterは実装済みで、`stream1`を高画質、`stream2`
-を低画質として選択し、ユーザー名とパスワードをVLCJオプションへ渡す。RTSP URIには資格情報を埋め込まない。JavaFXの映像
-サーフェスへの接続とストリーム画面遷移は次の実装単位である。
+を低画質として選択し、ユーザー名とパスワードをVLCJオプションへ渡す。RTSP URIには資格情報を埋め込まない。保存済みプロファイル選択と
+手動接続のどちらも接続成功時にライブ映像画面へ遷移し、切断時にセッションを停止して選択画面へ戻る。
 
 ## 5. データ保存
 
@@ -444,7 +444,7 @@ CREATE TABLE camera_secrets (
 
 - 対応OSをWindows限定にするか、macOS/Linuxも対象にするか
 - VLCJ/libVLCのnativeランタイム配布方法と、VLCJ GPLv3を踏まえたアプリケーション配布ライセンス
-- JavaFX映像領域へのネイティブ映像埋め込み方式
+- VLCJ JavaFX映像サーフェスの実機描画確認と、VLCJ/libVLCのnativeランタイム配布方法
 - SQLite JDBCドライバーのバージョンとネイティブSQLiteの配布方式
 - C210のハードウェアバージョン、ファームウェア、RTSP/ONVIF用カメラアカウントの準備状況
 - 双方向音声を実現するC210固有プロトコルの有無と実装可否
