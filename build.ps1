@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$MavenCommand = "mvn.cmd",
+    [switch]$Clean,
     [switch]$SkipTests
 )
 
@@ -17,17 +18,29 @@ if (Test-Path -LiteralPath $MavenCommand -PathType Leaf) {
     $mavenExecutable = $command.Source
 }
 
-$mavenArguments = @("clean", "verify")
-if ($SkipTests) {
+$mavenArguments = @("clean")
+if (-not $Clean) {
+    $mavenArguments += "verify"
+}
+if (-not $Clean -and $SkipTests) {
     $mavenArguments += "-DskipTests"
 }
 
 Push-Location $projectRoot
 try {
-    Write-Host "Running Maven build in $projectRoot"
+    if ($Clean) {
+        Write-Host "Cleaning Maven build artifacts in $projectRoot"
+    } else {
+        Write-Host "Running Maven build in $projectRoot"
+    }
     & $mavenExecutable @mavenArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Maven build failed with exit code $LASTEXITCODE."
+    }
+
+    if ($Clean) {
+        Write-Host "Maven build artifacts cleaned." -ForegroundColor Green
+        return
     }
 
     $jar = Get-ChildItem -LiteralPath (Join-Path $projectRoot "target") -Filter "*.jar" -File |
